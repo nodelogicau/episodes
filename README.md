@@ -102,6 +102,13 @@ becomes useful at the moment a person steps back and asks whether they acted as
 they meant to, which is why it must be complete, located and trustworthy, and
 why it must not editorialise.
 
+Kierkegaard put the asymmetry in a line: "Life can only be understood
+backwards; but it must be lived forwards" (*Journals*, 1843, tr. Dru). The
+family divides that sentence between its formats. intentions holds the living
+forwards. Particulars holds the understanding. Episodes hold the backwards: what
+the understanding is reached from, and what it has to answer to. Without them,
+understanding has nothing to look back on but its own earlier conclusions.
+
 ---
 
 ## Core Object Types
@@ -622,6 +629,10 @@ the agents associated with it, as `standpoint` and `source` are separated here �
 actor-centred record of what happened, shaped for feeds rather than memory.
 
 **Conceptual sources.**
+Søren Kierkegaard, *The Journals of Søren Kierkegaard*, tr. Alexander Dru
+(1938), entry for 1843, on life understood backwards and lived forwards,
+behind the division of the family between what happened, what is understood
+and what is meant ·
 Endel Tulving, "Episodic and semantic memory", in *Organization of Memory*
 (1972), for the distinction itself: memory of events located in time and place,
 as against facts detached from when they were learned ·
