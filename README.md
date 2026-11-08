@@ -50,9 +50,12 @@ It is the third member of a family:
 | prospective | [intentions](https://github.com/nodelogicau/intentions) | what a person means to do | resolution and retirement |
 | episodic | episodes | what happened | accumulation only |
 
-The formats are coupled only by reference. A DKF claim cites an episode as its
-evidence; an episode may name the intention it was the occasion of. Neither
-format validates the others, and an episodes workspace is useful on its own.
+The formats are coupled only by reference, and only in one direction: a DKF
+claim cites an episode as its evidence, and an episode cites nothing in either
+of the other formats. Neither of them validates an episode, and this
+specification is complete without them: an episodes workspace can be written,
+read and validated by an implementation that knows nothing of DKF or
+intentions (see [Conformance](#conformance)).
 
 *Forgetting* leaves open whether episodes are a third format or a DKF
 extension. They are a third format, for the reason that paper gives for
@@ -111,6 +114,26 @@ understanding has nothing to look back on but its own earlier conclusions.
 
 ---
 
+## Conformance
+
+The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be interpreted
+as described in [BCP 14](https://www.rfc-editor.org/info/bcp14)
+([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119),
+[RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they
+appear in all capitals.
+
+[Core Object Types](#core-object-types) and [File Layout](#file-layout) are
+normative, except where a passage is marked informative. Every other section
+is informative.
+
+This specification is complete on its own. A writer, reader or validator
+conforms by implementing the normative sections alone, with no DKF or
+intentions code, data or workspace. Where the normative text names a sibling
+format, it either is marked informative or says only what an episode does not
+hold.
+
+---
+
 ## Core Object Types
 
 The format defines one object type, `EPISODE`, and two blocks that may be
@@ -142,14 +165,16 @@ on ids that are not UUIDv7.
 The order in which fields are shown below is the canonical order. Writers
 SHOULD emit fields in it; readers MUST accept any order and MUST NOT reject a
 file for its arrangement. Fields an implementation adds are written after all
-specified fields. Canonical order is what makes two implementations produce
-byte-identical files for identical episodes, and so what makes a workspace
-reviewable as a diff.
+specified fields. A reader MUST NOT reject a file for a field this
+specification does not define, and MUST give such a field no meaning under
+this format; an `occasion` left by an earlier draft is such a field.
+Canonical order is what makes two implementations produce byte-identical files
+for identical episodes, and so what makes a workspace reviewable as a diff.
 
 ### Source and timestamp
 
-Every episode carries a `source` block and a `timestamp`, in the shape DKF and
-intentions share:
+Every episode carries a `source` block and a `timestamp`. (Informative: this is
+the same shape DKF and intentions use, so one harness can write all three.)
 
 ```yaml
 source:
@@ -161,8 +186,15 @@ timestamp: 2026-11-07T06:09:18Z            # recording time, RFC 3339 UTC
 
 `source` says who **recorded** the episode. It MUST contain at least one of
 `author` or `harness`; a harness recording a conversation on its own is a valid
-source. `author` is a reference to a particular, written as a URI where one is
-known, as in DKF.
+source. `author` is a **reference**: the person or agent on whose behalf the
+episode was recorded.
+
+A reference, here and in `standpoint`, `participants` and `place`, is a URI
+where one is known, and otherwise a string that identifies a person, agent or
+place to whoever wrote it. Resolving a reference is outside this format. A
+reference that nothing can resolve is still valid, and a reader MUST NOT reject
+an episode for one. (Informative: a DKF workspace may treat these values as
+particulars.)
 
 `source` is not the same as `standpoint`, below. A harness may record, on Ben's
 behalf, an email that Jane sent: the source is the harness acting for Ben; the
@@ -210,14 +242,13 @@ timestamp: 2026-11-07T03:24:40Z
 | `type` | yes | Always `episode`. |
 | `kind` | yes | What sort of happening this is: `conversation`, `message`, `email`, `event`, `note`, `upload`, `call`, or another short lowercase word. **Descriptive only**: it drives display and filtering, never which fields are valid. A reader MUST NOT reject an unknown `kind`. |
 | `occurred` | yes | When it happened, below. |
-| `standpoint` | yes | The particular whose act, utterance or experience this records, below. |
-| `participants` | no | Particulars present or addressed, as URIs or ids, sorted. May include the standpoint. |
-| `place` | no | A particular for where it happened. |
+| `standpoint` | yes | A reference to the person or agent whose act, utterance or experience this records, below. |
+| `participants` | no | References to those present or addressed, sorted. May include the standpoint. |
+| `place` | no | A reference to where it happened. |
 | `label` | no | A short human-readable name for the episode, such as an email's subject or an event's title, captured when it is recorded. Not a summary. |
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
 | `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. |
 | `content` | yes | Where the record of it lives, below. A container with no content of its own carries `content: {mode: none}`. |
-| `occasion` | no | The intentions object this episode was the occasion of, as `{id, version}`, below. |
 | `source` | yes | Who recorded it. |
 | `timestamp` | yes | When it was recorded. |
 | `source_status` | no | Whether referenced content can still be reached, below. |
@@ -264,8 +295,9 @@ recorded is the standpoint of the turn it came from. A harness that records its
 own turns as the person's has made its suggestions into the person's
 statements, and every claim built on them inherits the error.
 
-The standpoint is a reference to a particular. A harness speaking in a
-conversation is a participant like any other and has a URI.
+The standpoint is a reference, as defined under
+[Source and timestamp](#source-and-timestamp). A harness speaking in a
+conversation is a participant like any other and has a reference of its own.
 
 #### `content`
 
@@ -307,16 +339,24 @@ content:
 
 `ref` is a URI or an identifier meaningful to whatever can fetch it. `version`
 is the source's own notion of a version where it has one: a calendar event's
-sequence or ETag, a file's revision id. `hash` follows DKF's definition
-(SHA-256 over the content with CRLF normalised to LF and nothing else changed),
-and is what lets a later reader tell that what the pointer now returns is not
-what was recorded.
+sequence or ETag, a file's revision id. `hash` is what lets a later reader tell
+that what the pointer now returns is not what was recorded.
+
+`hash` is written `<algorithm>:<digest>`. It is taken over the content as
+fetched, with CRLF sequences normalised to LF and *nothing else* altered: not trailing whitespace, not Unicode normalisation
+form, not a final newline. Line endings are an artefact of transport and differ
+by platform; everything else differs because someone changed the content, and
+the check must see it. Writers MUST write `sha256`. Readers MUST accept any
+`<algorithm>:<digest>` and MUST report an algorithm they do not implement as
+unverified, never as invalid. (Informative: this is DKF's rule, so a DKF claim
+and the episode it cites can carry the same hash.)
 
 A reference episode MUST NOT carry `text`. That is the format's rule against
 ingestion: an episode about an email is a trace of the email, not a copy of it,
-and a mailbox remains the system of record for mail. The evidence a claim needs
-travels with the claim, in DKF's `source.document.quote`, so a claim stays
-verifiable without the episode store holding the message.
+and a mailbox remains the system of record for mail. Whatever cites the episode
+carries the words it relies on as its own quote, so it stays verifiable without
+the episode store holding the message. (Informative: in DKF that quote is
+`source.document.quote`.)
 
 A container with nothing of its own, a conversation whose turns are its
 children, carries `content: {mode: none}`.
@@ -336,23 +376,6 @@ this email and its attachments".
 A child inherits nothing it does not state. In particular `standpoint` is
 stated on every turn of a conversation, because the speaker alternates and the
 distinction is what consolidation depends on.
-
-#### `occasion`
-
-```yaml
-occasion: {id: int_01a06d20-5a3b-7e88-b1c4-7d9e0f2a4c66, version: 4}
-```
-
-An episode MAY name the intentions object it was the occasion of: the session
-of writing that an intention was placed for, the meeting a commitment held a
-place for. It is a factual link, recorded when the harness creates the episode
-from the placement itself, and it says only *this happened in the place that
-was held for that*. Whether the intention was thereby fulfilled, done well, or
-done at all is a judgement, and so a DKF claim citing both.
-
-This is where the family's loop closes. intentions retires an intention as
-`fulfilled`; an episode records what took place; a claim citing the episode is
-the evidence that turns a self-claim from aspiration into description.
 
 ### `source_status`
 
@@ -394,9 +417,10 @@ an inbox. Forgetting is redaction, below, and is always explicit.
 ### Redaction
 
 Redaction removes text from an episode and keeps the episode: its id, its place
-in a container, and a record of who removed what, when and why. It follows
-[DKF's redaction](https://github.com/nodelogicau/particulars#redaction) in shape
-and in every rule this section does not change.
+in a container, and a record of who removed what, when and why. Every rule for
+it is stated here. (Informative: the block has the shape of
+[DKF's redaction](https://github.com/nodelogicau/particulars#redaction), and the
+rules are DKF's adapted to episodes.)
 
 ```yaml
 redacted:
@@ -406,14 +430,20 @@ redacted:
   fields: [label, content.text]
 ```
 
-`timestamp`, `reason`, `source` and `fields` are all required. `reason` MUST
-NOT restate what was removed.
+`timestamp`, `reason`, `source` and `fields` are all required, and the block is
+written last in the file. `reason` MUST NOT restate what was removed; no tool
+can check that, so it is a rule for whoever writes one.
+
+Every path listed in `fields` is absent from the file. A field the format
+otherwise requires (`content.text` on an inline episode, `content.ref` on a
+reference episode) is valid when absent **only** because `fields` lists it.
+That is how a validator tells a redacted episode from a malformed one: an
+inline episode with no `text` and no `redacted` block listing it is rejected.
 
 **What can be redacted is a closed set:** `label`, `participants`, `place`,
 `content.text`, `content.ref`, `content.version`, `content.hash`. A writer
 refuses any other path and a validator rejects a file listing one. The set is
-closed for the reason DKF's is: none of these is mirrored in the
-[index](#indexyaml), and sealed index segments never change, so a redaction
+closed because none of these is mirrored in the [index](#indexyaml), and sealed index segments never change, so a redaction
 must never change an entry. `id`, `kind`, `occurred`, `container`, `ordinal`,
 `standpoint` and `timestamp` cannot be redacted. That costs something, since
 the fact that one person addressed another at a given time can itself be what
@@ -421,31 +451,36 @@ someone wants forgotten, and it is left to a later version that can mask index
 entries.
 
 **Redacting `content.text` withdraws an inline episode.** It carries no record,
-so it is out of recall and makes every claim citing it unverifiable. Redacting
-`content.ref` leaves a reference episode as a bare tombstone: it says that
+so it is out of recall, and anything that quotes it can no longer be checked
+against it. Redacting `content.ref` leaves a reference episode as a bare tombstone: it says that
 something of this kind happened at this time from this standpoint, and no
 longer where.
 
 **It is irreversible and never implicit.** The block is never removed and a
 redacted field is never restored. A file carries at most one `redacted` block;
 redacting again replaces its `timestamp`, `reason` and `source` and makes
-`fields` the union. Nothing redacts as a side effect: not a source being
-deleted, not a claim being retracted or redacted.
+`fields` the union of old and new. Nothing redacts as a side effect: not a
+source being deleted, not anything that cites the episode being withdrawn or
+redacted.
 
-**Redaction does not cascade, in either direction.** Redacting an episode
-changes no claim; the claims citing it become unverifiable and are reported, in
-DKF's terms, so a person can decide whether to redact them too. An
-implementation MAY offer "redact this episode and the claims citing it" as one
-action, provided it writes a separate `redacted` block on each object it
-changes. Redacting a claim changes no episode.
+**Redaction does not cascade.** Redacting an episode changes no other episode,
+not its container and not its children, and no object outside the workspace.
+(Informative: in a DKF workspace, claims citing a redacted episode become
+unverifiable and are reported, so a person can decide whether to redact them
+too. An implementation of both formats may offer "redact this episode and the
+claims citing it" as one action, provided it writes a separate `redacted`
+block on each object it changes. Redacting a claim changes no episode.)
 
-**What redaction does not remove.** As in DKF, it removes text from the
-current file and from what a conformant implementation reads, recalls, serves
-and embeds. It does not remove it from version control, clones or earlier
-fetches. That caveat is sharper here than in DKF, because inline episodes are
-whole conversations: in a git workspace the text of every redacted turn stays
-in history, and an implementation whose store is a git repository MUST say so
-when it redacts. Erasure from history is a property of the store, not of the
+**What redaction does not remove.** It removes text from the current file and
+from what a conformant implementation reads, recalls, serves and embeds; an
+implementation that keeps embeddings deletes those of a redacted field,
+because an embedding can disclose what it was computed from. It does not
+remove the text from version control, clones or earlier fetches. Inline
+episodes are whole conversations, so in a git workspace the text of every
+redacted turn stays in history, and an implementation whose store is a git
+repository MUST say so when it redacts. An implementation whose store controls
+access to earlier versions MAY restrict it; nothing in the format depends on
+whether it does. Erasure from history is a property of the store, not of the
 file.
 
 ---
@@ -458,15 +493,19 @@ file.
               │ content.ref (trace)                   │ content.text (inline)
               │                                       ▼
           EPISODE ◀──── container ──── EPISODE (turn, message, attachment)
-              ▲   │
-              │   └── occasion ──▶ intentions object (id, version)
+              ▲
+              │  (informative: cited from outside the format)
               │
    DKF claim: source.document.ref = epi_…, quote = the words relied on
 ```
 
-### How the other formats cite an episode
+### Relation to other formats
 
-A DKF claim cites an episode through `source.document`:
+*This section is informative. It describes how the sibling formats can use
+episodes and places no requirement on an episodes implementation.*
+
+An episode cites nothing outside its own workspace. The other formats cite it.
+A DKF claim does so through `source.document`:
 
 ```yaml
 source:
@@ -485,9 +524,14 @@ episode id is the `ref`; DKF already allows a `ref` that names something its
 reader may be unable to fetch. A reader with the episodes workspace can
 resolve it; one without can still read the quote.
 
-intentions does not cite episodes. An episode names the intention it was the
-occasion of, by `occasion`, an outbound reference from the episode, so no
-intentions file changes when an episode is recorded.
+An episode does not name the intention it realised, and intentions does not cite
+episodes. That something happened in the place held for an intention, or
+reported it done, or fulfilled it, is a judgement about the episode, so the
+link between the two is a DKF claim citing both. This is where the family's
+loop closes: intentions retires an intention as `fulfilled`, an episode
+records what took place, and a claim citing the episode is the evidence that
+turns a self-claim from aspiration into description. Recording an episode
+changes no file in either of the other formats.
 
 ### When an episode is recorded
 
@@ -513,20 +557,63 @@ the implementation's decision.
 ```
 /episodes.yaml                 workspace marker and configuration
 /episodes/
+  2026-09/                     sealed: an id two months later exists
+    …
   2026-11/
     epi_01a1b4b1-8a20-7d43-b6e1-0c9f5a7d3e12.yaml
     epi_01a1b4b2-3c1d-7e5a-9f02-6b8c4d2e1a37.yaml
   legacy/                      only if ids exist from which no month derives
 /index.yaml                    derived cache: the open months
 /index/
-  2026-11.yaml                 sealed segments, one per earlier month
+  2026-09.yaml                 sealed segments, one per sealed month
+  legacy.yaml                  only if legacy/ exists
 ```
 
-The layout follows DKF's [sharding](https://github.com/nodelogicau/particulars#sharding):
-a file's path is derived from its id alone, the month being the UTC month of
-the id's minting instant, and a month is sealed once an id two or more months
-later exists. A file in a sealed month may change only by having its
-`source_status` rewritten or gaining a `redacted` block.
+(Informative: the layout follows DKF's
+[sharding](https://github.com/nodelogicau/particulars#sharding), adapted to a
+format with one object type and no retractions. Every rule is stated below.)
+
+### Sharding
+
+**A file's path derives from its id and nothing else.** A UUIDv7 carries its
+minting instant in its first 48 bits; the calendar month of that instant, in
+UTC, is the shard. An episode minted on 2026-11-07 UTC lives at
+`episodes/2026-11/<id>.yaml`, whatever its `occurred` or `timestamp` say. A
+reader never guesses the layout from what it finds on disk: a file in a
+directory its id does not derive is a validation failure naming the file and
+the path its id derives.
+
+**`legacy/` holds ids from which no month derives:** an identifier part that
+is not a UUID, or a UUID of a version other than 7. Such an episode lives at
+`episodes/legacy/<id>.yaml` and its index entry in `index/legacy.yaml`. A
+UUIDv7 with an implausible instant still derives a month. Conformant writers
+mint only UUIDv7, so a legacy id arrives only by copy, merge or a
+non-conformant writer. The directory is never sealed.
+
+**A month is sealed** once any id in the workspace was minted two or more
+months after it. The newest id's month and the month before it are open. The
+month of grace is what lets a branch minted on 28 November merge on 5
+December, after the main line has minted in December, and it absorbs clock
+skew of hours or days at a boundary. An implementation MUST NOT mint into a
+sealed month.
+
+**Sealing stops a month gaining files, not its files changing.** A file in any
+month, open or sealed, may change in exactly two ways: its `source_status` is
+rewritten, or it gains or extends a `redacted` block and loses the fields that
+block lists. Neither changes an index entry. Any other change to an existing
+file is non-conformant, in an open month and a sealed one alike.
+
+**A late merge is detected by count.** Each sealed segment records `count`, the
+number of files in its month's directory. A rebuild or validation compares a
+directory listing against the count and parses nothing unless they differ. A
+difference means a branch open across two or more month boundaries has added
+files to a sealed month: validation fails naming the files, and the remedy is
+to re-mint the branch's episodes before merging.
+
+**A future id is a broken clock.** A validator warns, naming the episode, on any
+id minted or `timestamp` dated later than now, and fails on an id minted two or
+more months after its own current month, because such an id would seal the
+month every correct writer is minting into.
 
 ### `episodes.yaml`
 
@@ -546,13 +633,52 @@ what it can. Unknown keys are ignored.
 
 ### `index.yaml`
 
-The index is a cache of the files, never the reverse. Each entry mirrors
-exactly `id`, `kind`, `occurred`, `container`, `ordinal`, `standpoint` and
-`timestamp`, which is what recall by time, by conversation and by speaker needs,
-and is also exactly the set redaction cannot touch. Nothing in `content`,
-`label`, `participants`, `place`, `occasion` or `source_status` enters the
-index, so each of them stays redactable or rewritable without changing a sealed
-segment.
+The index is a cache of the files, never the reverse. The episode files are
+the source of truth; the index MUST be fully reconstructible from them, and a
+consumer MUST NOT return wrong results because the index is missing or stale
+(it may be slower). Two branches that each add an episode both touch
+`index.yaml`, and the conflict is resolved by regenerating it, never by hand.
+The index stays committed because an HTTP consumer cannot list a directory, and
+for it the index is how episodes are enumerated; it should treat the index as
+possibly lagging the files.
+
+The root, `index.yaml`, lists the segments and holds the entries for the open
+months. Each sealed month, and `legacy`, has a segment holding its entries:
+
+```yaml
+# index.yaml
+format: episodes/0.1
+segments:
+  - path: index/2026-09.yaml
+    count: 412
+entries:                       # minted in an open month
+  - id: epi_01a1b4b2-3c1d-7e5a-9f02-6b8c4d2e1a37
+    kind: message
+    occurred: {start: 2026-11-07T14:24:00, tz: Australia/Melbourne, basis: recorded}
+    container: epi_01a1b4b1-8a20-7d43-b6e1-0c9f5a7d3e12
+    ordinal: 7
+    standpoint: https://github.com/benfortuna
+    timestamp: 2026-11-07T03:24:40Z
+```
+
+```yaml
+# index/2026-09.yaml — a sealed segment
+format: episodes/0.1
+entries:
+  - id: epi_…
+    …
+```
+
+When a month seals, its entries leave the root for a new segment, and the root
+gains that segment's `path` and `count`. A segment's `count` equals the number
+of files in its month's directory, and a segment never changes once written.
+
+Each entry mirrors exactly `id`, `kind`, `occurred`, `container`, `ordinal`,
+`standpoint` and `timestamp`, which is what recall by time, by conversation and
+by speaker needs, and is also exactly the set redaction cannot touch. Nothing
+in `content`, `label`, `participants`, `place` or `source_status` enters the
+index, so each of them stays redactable or rewritable without changing a
+sealed segment.
 
 ---
 
@@ -576,9 +702,9 @@ downstream can recover it.
 **Forgetting is explicit.** Nothing is redacted as a side effect, and the
 format says plainly what redaction cannot reach.
 
-**Compose by reference.** Episodes depend on no DKF or intentions object to
-exist or validate, and are cited by them through fields those formats already
-have.
+**Compose by reference, in one direction.** Episodes cite no object in any
+other format and depend on no other specification to be written, read or
+validated. The other formats cite episodes, through fields they already have.
 
 ---
 
@@ -604,9 +730,23 @@ than closed.
   container and each turn an episode. Whether turns should instead be grouped
   into segments by topic, or a whole session be one inline episode, is open,
   and shapes how precisely a claim can cite a conversation.
-- **A provenance spine.** `source`, ids and timestamps are copied by agreement
-  from DKF and intentions. *Forgetting* asks whether that shared shape should
-  be its own specification; a third format sharpens the question.
+- **A provenance spine.** `source`, ids, timestamps, the content hash,
+  redaction and sharding are copied by agreement from DKF and restated here in
+  full, so that this format stands alone. Copies can drift apart. *Forgetting*
+  asks whether that shared shape should be its own specification; a third
+  format sharpens the question, and standing alone means such a specification
+  would have to be one this format restates or can do without.
+- **Duplicate recordings.** Two episodes of one happening from different
+  standpoints are not duplicates, and whether they are the same event is a DKF
+  claim. The same recording made twice is: on-demand recording that runs again,
+  two machines recording one email and merging cleanly under different ids, a
+  replayed turn taking an `ordinal` already used. Recording "when something
+  first cites" a thing implies a lookup by `content.ref`, which the index
+  deliberately omits. Should `(container, ordinal)` be unique, should writers
+  avoid a second `(standpoint, content.ref)`, and once a duplicate exists, can
+  an appended, unindexed block say which episode it repeats? The same relation
+  may answer how a better transcript names the one it improves on. Refs that
+  alias one thing, such as a provider id and a `Message-ID`, are harder still.
 
 ---
 
@@ -645,14 +785,14 @@ Marcia Johnson, Shahin Hashtroudi and D. Stephen Lindsay, "Source monitoring"
 (1993), on how people keep what was said and lose who said it, behind
 `standpoint` ·
 Daryl Bem, "Self-perception theory" (1972), on people coming to know
-themselves from what they observe themselves doing, behind `occasion` and the
-closing of the loop with intentions.
+themselves from what they observe themselves doing, behind the closing of the
+loop with intentions.
 
 **Ecosystem.**
 [particulars](https://github.com/nodelogicau/particulars), semantic memory,
 which cites episodes ·
 [intentions](https://github.com/nodelogicau/intentions), prospective memory,
-which episodes name as their occasion ·
+linked to episodes by DKF claims ·
 [Forgetting](https://forgetting.fyi), the argument the family shares, which
 identified this gap.
 
