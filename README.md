@@ -273,17 +273,40 @@ transition from the instant of utterance, and only a zone allows that. A date
 alone (`2026-11-07`) is valid when the time is unknown.
 
 `basis` says how the time is known. `recorded`: the harness observed it as it
-happened, as with a conversation turn. `stated`: a source gave it, as with an
-email's `Date` header or a calendar event's start. `inferred`: it was worked
-out, as with "last Tuesday" in a note written today. A source can lie, and a
-clock can drift; `basis` lets a later reader weigh the time accordingly
-instead of trusting all of them alike.
+happened, as with a conversation turn. `stated`: a source gave the time of the
+happening itself, as with an email's `Date` header or a calendar event's
+creation time. `inferred`: it was worked out, as with "last Tuesday" in a note
+written today. A source can lie, and a clock can drift; `basis` lets a later
+reader weigh the time accordingly instead of trusting all of them alike.
+
+**`occurred` comes from the happening, never from a plan.** A writer MUST take
+it from the happening the episode records, by one of the three bases above,
+and MUST NOT copy it from a schedule, a plan or a time that was set aside. A
+session planned for two that took place at four occurred at four; when it
+took place is part of what a comparison of meant against done looks at, and a
+copied time erases it. There is no `planned` basis for the same reason.
+
+**Nothing is recorded before it happens.** A writer MUST NOT record an episode
+whose `occurred.start` is later than its recording instant, `timestamp`, and
+MUST NOT give an `occurred.end` later than it. Either would describe something
+that has not happened yet, and episodes are never revised: a meeting recorded
+in advance and then cancelled would stay in the record for good. An episode
+can be recorded while its happening is still going on, as a conversation is at
+its first turn, by leaving `end` out. The comparison interprets `occurred` in
+its `tz`, at the offset in force at that local time; a date alone is compared
+as a date, in `tz`, with the recording instant's date there.
+
+A validator warns, naming the episode, when either bound is violated. It
+warns rather than fails because it cannot tell a writer's mistake from clocks
+that disagree by minutes, the writer's or a source's, in the same way it warns
+on an id from later than now (see [Sharding](#sharding)).
 
 #### `standpoint`
 
 Every episode is someone's. An email is its sender's record of what they chose
 to write. A conversation turn is its speaker's utterance. A calendar event is
-the record of the person whose calendar holds it. A note is its writer's
+the record, kept by the person whose calendar holds it, of what was arranged.
+A note is its writer's
 account, and when the note says what someone else thinks, the episode is still
 the writer's: what Sarah thinks enters the family as a DKF claim reported from
 the note, never as Sarah's episode.
@@ -342,9 +365,36 @@ is the source's own notion of a version where it has one: a calendar event's
 sequence or ETag, a file's revision id. `hash` is what lets a later reader tell
 that what the pointer now returns is not what was recorded.
 
+**A reference episode records the happening its source witnesses.** For mail,
+that is the sending: `occurred` is the `Date` header. For a file, it is the
+upload or the writing. For a calendar event, it is the **arranging**: the
+episode records that the event was put in the calendar, its `occurred` is when
+that was done (the event's creation time, `basis: stated`), and it MUST NOT be
+the event's scheduled time. The scheduled time stays where it lives, in the
+referenced event, and `label` may carry the event's title as captured.
+
+```yaml
+# a meeting for next Tuesday, arranged yesterday, recorded today
+kind: event
+occurred: {start: 2026-11-07T16:02:00, tz: Australia/Melbourne, basis: stated}
+label: Budget review with Jane
+content:
+  mode: ref
+  ref: gcal:evt_7q2m4k9d0s1a
+  version: "3"
+```
+
+A calendar is a record of what was arranged, not of what took place. A
+meeting that was arranged and never held leaves the same calendar event as one
+that was held, so an episode of the calendar is not evidence that the meeting
+happened. That needs a record of the meeting itself: a turn, a note, a
+transcript, attendance from the system that hosted it. Read this way, a
+calendar episode is true when it is recorded and can be recorded at any time
+after the arranging, including before the meeting.
+
 `hash` is written `<algorithm>:<digest>`. It is taken over the content as
-fetched, with CRLF sequences normalised to LF and *nothing else* altered: not trailing whitespace, not Unicode normalisation
-form, not a final newline. Line endings are an artefact of transport and differ
+fetched, with CRLF sequences normalised to LF and *nothing else* altered: not
+trailing whitespace, not Unicode normalisation form, not a final newline. Line endings are an artefact of transport and differ
 by platform; everything else differs because someone changed the content, and
 the check must see it. Writers MUST write `sha256`. Readers MUST accept any
 `<algorithm>:<digest>` and MUST report an algorithm they do not implement as
@@ -483,6 +533,18 @@ access to earlier versions MAY restrict it; nothing in the format depends on
 whether it does. Erasure from history is a property of the store, not of the
 file.
 
+### What a workspace does not say
+
+A workspace is not an exhaustive record. Referenced content is recorded when
+something needs it, an implementation may drop episodes nothing cites, and
+much of what a person does leaves no record anywhere. An unrecorded happening
+and a non-happening look the same.
+
+A reader or consumer MUST NOT treat the absence of an episode as evidence that
+something did not happen. A finding that something was not done, for an
+interval in which it was planned or for any other, needs evidence of its own;
+an empty interval in the workspace is not that evidence.
+
 ---
 
 ## Object Model
@@ -533,6 +595,24 @@ records what took place, and a claim citing the episode is the evidence that
 turns a self-claim from aspiration into description. Recording an episode
 changes no file in either of the other formats.
 
+**Retiring as `fulfilled` is not evidence.** intentions records its own
+judgement, `retired: {kind: fulfilled, …}`, and it is the person letting the
+intention go: they consider it done, or done enough to stop holding. Its
+`timestamp` is when the retirement was written, not when anything happened.
+It need not agree with what claims make of the episodes, and when it does not,
+nothing is in conflict: a claim that the intention was not really fulfilled
+sits beside the retirement as one reading beside another. Whether a
+retirement may point at the episodes it was decided on is a question for
+intentions.
+
+**A calendar hold is the plan, not its evidence.** A harness may write a busy
+hold into a person's calendar from an intention's placement, and the hold stays
+after the intention is retired. An episode of that hold records that the time
+was set aside, as every calendar episode records an arrangement (see
+[`content`](#content)). A claim that the intention was fulfilled which cites
+only such an episode cites the plan as evidence for itself. The same holds for
+an event imported from someone else's calendar.
+
 ### When an episode is recorded
 
 The format says what an episode is, not when one must exist. Two practices are
@@ -548,7 +628,9 @@ expected, and both are implementation choices:
   citing object together so that neither exists without the other.
 
 Whether an episode that nothing cites any longer is kept or dropped is likewise
-the implementation's decision.
+the implementation's decision. Both practices leave gaps, which is why a
+missing episode means nothing (see
+[What a workspace does not say](#what-a-workspace-does-not-say)).
 
 ---
 
@@ -747,6 +829,11 @@ than closed.
   an appended, unindexed block say which episode it repeats? The same relation
   may answer how a better transcript names the one it improves on. Refs that
   alias one thing, such as a provider id and a `Message-ID`, are harder still.
+- **A container's end.** An episode is never recorded before it happens, and
+  never revised, so a conversation recorded at its first turn carries no
+  `occurred.end` and can never gain one. Its end can be read from its last
+  turn. Should a container instead be allowed an appended, unindexed
+  observation of its end, as `source_status` is appended for a source?
 
 ---
 
