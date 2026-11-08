@@ -204,7 +204,8 @@ person keeps what was said and loses who said it.
 
 Every timestamp field is an [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)
 `date-time`. Writers write recording instants in UTC with `Z` at seconds
-precision. `occurred` is the exception, below.
+precision. `occurred` is the exception: it keeps the local offset and zone of
+the happening, below.
 
 ### `EPISODE`
 
@@ -214,8 +215,7 @@ id: epi_01a1b4b2-3c1d-7e5a-9f02-6b8c4d2e1a37
 type: episode
 kind: message
 occurred:
-  start: 2026-11-07T14:24:00
-  tz: Australia/Melbourne
+  start: "2026-11-07T14:24:00+11:00[Australia/Melbourne]"
   basis: recorded
 standpoint: https://github.com/benfortuna
 participants:
@@ -248,7 +248,8 @@ timestamp: 2026-11-07T03:24:40Z
 | `label` | no | A short human-readable name for the episode, such as an email's subject or an event's title, captured when it is recorded. Not a summary. |
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
 | `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. |
-| `content` | yes | Where the record of it lives, below. A container with no content of its own, and a self-attested act with nothing to hold its attestation, carry `content: {mode: none}`. |
+| `links` | no | Typed links to earlier episodes or to outside resources, below. |
+| `content` | yes | Where the record of it lives, below. A container with no content of its own, and a self-attested act, carry `content: {mode: none}`. |
 | `source` | yes | Who recorded it. |
 | `timestamp` | yes | When it was recorded. |
 | `source_status` | no | Whether referenced content can still be reached, below. |
@@ -258,19 +259,43 @@ timestamp: 2026-11-07T03:24:40Z
 
 ```yaml
 occurred:
-  start: 2026-11-07T14:24:00     # local date-time, no offset
-  end: 2026-11-07T15:10:00       # optional
-  tz: Australia/Melbourne        # IANA zone name
+  start: "2026-11-07T14:24:00+11:00[Australia/Melbourne]"
+  end: "2026-11-07T15:10:00+11:00[Australia/Melbourne]"    # optional
   basis: stated                  # recorded | stated | inferred
 ```
 
-`start` and `end` are local date-times interpreted in `tz`, an
-[IANA time zone](https://www.iana.org/time-zones) name, not UTC instants and
-not offsets. An offset is a fact about one instant; a zone is a fact about a
-place. A claim that resolves "tomorrow at 2" against an episode must compute
+A date-time in `start` or `end` is an
+[RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) value: an RFC 3339
+`date-time` with its local offset (or `Z`), followed by a suffix naming an
+[IANA time zone](https://www.iana.org/time-zones) in brackets. The offset and
+the zone say different things, and both are needed. An offset is a fact about
+one instant: it fixes when the episode happened, including in the hour that
+happens twice when daylight saving ends, where in Melbourne on 2026-04-05
+`02:30+11:00` and `02:30+10:00` are an hour apart. A zone is a fact about a
+place: a claim that resolves "tomorrow at 2" against an episode must compute
 the offset at the instant referred to, which may lie across a daylight-saving
-transition from the instant of utterance, and only a zone allows that. A date
-alone (`2026-11-07`) is valid when the time is unknown.
+transition from the instant of utterance, and only a zone allows that.
+
+- **The offset is required and governs.** The instant is the one the offset
+  fixes. When the offset disagrees with the zone's rules at that local time, a
+  validator warns, naming the episode, and readers still take the instant from
+  the offset.
+- **The zone is written whenever it is known, and never guessed.** A source
+  that gives only an offset, as a mail `Date` header does, is recorded with the
+  offset alone: `"2026-11-07T14:24:00+11:00"`.
+- **No other suffixes.** Writers MUST NOT write RFC 9557's critical flag (`!`)
+  or any suffix but the zone. Readers MUST ignore an elective suffix they do
+  not implement, such as `[u-ca=gregory]`, and MUST treat as invalid an episode
+  with a critical suffix they cannot honour.
+- **A date alone is valid** when the time is unknown: `"2026-11-03"`. RFC 9557
+  gives a date no suffix, so a date alone MAY be accompanied by `tz`, an IANA
+  zone name, saying where the date is reckoned. `tz` MUST NOT appear beside a
+  date-time, whose zone is its suffix. `start` and `end` take the same form,
+  both dates or both date-times.
+- **Values are quoted.** Writers MUST write `start` and `end` as double-quoted
+  YAML strings, in episode files and in the index. `[` and `]` are flow
+  indicators in YAML, and some parsers turn an unquoted date-time into a
+  timestamp type that loses the zone.
 
 `basis` says how the time is known. `recorded`: the harness observed it as it
 happened, as with a conversation turn. `stated`: a source gave the time of the
@@ -292,9 +317,10 @@ MUST NOT give an `occurred.end` later than it. Either would describe something
 that has not happened yet, and episodes are never revised: a meeting recorded
 in advance and then cancelled would stay in the record for good. An episode
 can be recorded while its happening is still going on, as a conversation is at
-its first turn, by leaving `end` out. The comparison interprets `occurred` in
-its `tz`, at the offset in force at that local time; a date alone is compared
-as a date, in `tz`, with the recording instant's date there.
+its first turn, by leaving `end` out. A date-time is compared as the instant
+its offset fixes. A date alone is compared as a date with the recording
+instant's date, reckoned in `tz` where `tz` is present, and otherwise in UTC
+allowing one day, since the date's own zone is unknown.
 
 A validator warns, naming the episode, when either bound is violated. It
 warns rather than fails because it cannot tell a writer's mistake from clocks
@@ -360,7 +386,9 @@ content:
   media_type: message/rfc822        # optional
 ```
 
-`ref` is a URI or an identifier meaningful to whatever can fetch it. `version`
+`ref` is a URI or an identifier meaningful to whatever can fetch it, and
+MUST NOT be an episode id: what a reference episode points at lives outside the
+workspace, and a relation between episodes is a [link](#links). `version`
 is the source's own notion of a version where it has one: a calendar event's
 sequence or ETag, a file's revision id. `hash` is what lets a later reader tell
 that what the pointer now returns is not what was recorded.
@@ -376,7 +404,7 @@ referenced event, and `label` may carry the event's title as captured.
 ```yaml
 # a meeting for next Tuesday, arranged yesterday, recorded today
 kind: event
-occurred: {start: 2026-11-07T16:02:00, tz: Australia/Melbourne, basis: stated}
+occurred: {start: "2026-11-07T16:02:00+11:00[Australia/Melbourne]", basis: stated}
 label: Budget review with Jane
 content:
   mode: ref
@@ -410,7 +438,7 @@ the episode store holding the message. (Informative: in DKF that quote is
 
 `content: {mode: none}` is valid in exactly two cases: a container with nothing
 of its own, such as a conversation whose turns are its children, and a
-[self-attested act](#self-attested-acts) with nothing to hold its attestation.
+[self-attested act](#self-attested-acts).
 Writers SHOULD write a container together with its first child, so that a
 container is never seen without one.
 
@@ -430,6 +458,62 @@ A child inherits nothing it does not state. In particular `standpoint` is
 stated on every turn of a conversation, because the speaker alternates and the
 distinction is what consolidation depends on.
 
+#### Links
+
+`links` says how an episode relates to other episodes, or to resources outside
+the workspace, using [Web Linking](https://www.rfc-editor.org/rfc/rfc8288)
+(RFC 8288):
+
+```yaml
+links:
+  - rel: predecessor-version
+    href: epi_01a1b6c0-2d14-7a3e-8b52-9e0f1c7d4a26   # the transcript this one improves on
+  - rel: via
+    href: epi_01a1b6a2-7e31-7c08-a4d9-5b2e8f0c3d17   # the voice memo it was made from
+```
+
+Each link has exactly `rel` and `href`. `rel` is a relation type registered in
+the [IANA Link Relations registry](https://www.iana.org/assignments/link-relations/),
+written in lowercase and used in its registered meaning, or an absolute URI,
+which is how RFC 8288 lets anyone define a relation without a registry. A
+`rel` that is neither is invalid. `href` is an episode id, resolved within the
+workspace, or a URI. Writers sort `links` by `rel` and then by `href`. A reader
+MUST NOT reject an episode for a `rel` it does not know, and gives it no
+meaning.
+
+Two registered relations have a meaning between episodes:
+
+- **`via`** ([RFC 4287](https://www.rfc-editor.org/rfc/rfc4287)): this episode
+  records something taken from the target. A transcript is `via` the episode of
+  the recording it was made from; a [self-attested act](#self-attested-acts) is
+  `via` the turn in which it was attested.
+- **`predecessor-version`** ([RFC 5829](https://www.rfc-editor.org/rfc/rfc5829)):
+  this episode supersedes the target as a rendering of the same thing, as a
+  better transcript supersedes an earlier one. The earlier episode is not
+  changed and stays citable.
+
+**Links are written once.** A writer writes `links` when it records the episode
+and never adds, removes or changes one afterwards, except by redaction. A link
+to an episode names one recorded before it, so nothing ever needs adding later:
+the newer episode carries the relation. A link whose episode id does not
+resolve, because the target was redacted, dropped or never copied, is reported
+as unresolved and does not make the episode invalid.
+
+**Links do not restate containment.** `container` and `ordinal` are the
+format's containment, mirrored in the index, and a writer MUST NOT also write
+it as a link. A validator warns, naming the episode, on an `up` or `collection`
+link whose target is the episode's own `container`.
+
+**Links record provenance, not judgement.** A link says what was known when
+the episode was recorded: where its record came from, what it supersedes.
+That an episode fulfilled a plan, or contradicts another, is a judgement, and
+belongs outside the format. No relation this specification defines targets an
+object of another format. (Informative: in the family, such a judgement is a
+DKF claim citing the episodes.)
+
+Links are never mirrored in the [index](#indexyaml), so `links` can be
+redacted.
+
 #### Self-attested acts
 
 Much of what a person does leaves no record: a solo block of deep work, a run,
@@ -443,34 +527,33 @@ id: epi_01a1b875-0c28-7e19-a3d5-7c1b9f4e2a60
 type: episode
 kind: activity
 occurred:
-  start: 2026-11-08T09:00:00
-  end: 2026-11-08T10:30:00
-  tz: Australia/Melbourne
+  start: "2026-11-08T09:00:00+11:00[Australia/Melbourne]"
+  end: "2026-11-08T10:30:00+11:00[Australia/Melbourne]"
   basis: stated
 standpoint: https://github.com/benfortuna
 label: Deep work on the budget draft
+links:
+  - rel: via
+    href: epi_01a1b874-e130-7b2c-9d41-3f6a8e0c5b27   # the turn: "log ninety minutes of deep work from nine"
 content:
-  mode: ref
-  ref: epi_01a1b874-e130-7b2c-9d41-3f6a8e0c5b27   # the turn: "log ninety minutes of deep work from nine"
+  mode: none
 source:
   author: https://github.com/benfortuna
   harness: claude
 timestamp: 2026-11-08T00:00:41Z
 ```
 
-Its `content` takes one of two forms:
-
-- **The attestation is an episode in the workspace,** such as the turn in which
-  the person asked for the act to be logged, or a note they wrote:
-  `{mode: ref, ref: <that episode's id>}`. A reader resolves an `epi_` ref in
-  its own workspace. No `hash` is needed, because episodes are not revised.
-- **Nothing holds the attestation,** as when the person presses a control whose
-  only purpose is to log the act: `{mode: none}`.
+Its `content` is always `{mode: none}`: the act itself left no record. When
+the attestation is an episode in the workspace, such as the turn in which the
+person asked for the act to be logged, or a note they wrote, the act names it
+with a [`via` link](#links). When nothing holds the attestation, as when the
+person presses a control whose only purpose is to log the act, the act has no
+`via` link.
 
 **It is self-attestation only.** A self-attested act's `standpoint` MUST equal
-its `source.author`. When its `content` refs an episode that resolves in the
-workspace, that episode's `standpoint` MUST equal the act's. A ref that does
-not resolve, because its episode was redacted, dropped or never copied, is
+its `source.author`. When it links `via` an episode that resolves in the
+workspace, that episode's `standpoint` MUST equal the act's. A `via` link that
+does not resolve, because its episode was redacted, dropped or never copied, is
 reported as unresolved and is not invalid. Someone else's act is never
 recorded this way: what Jane says she did is in the episode in which she says
 it, and is taken from there the way the [`standpoint`](#standpoint) section
@@ -487,8 +570,8 @@ interpreter. No validator can check it, so it is a rule for writers.
 
 **It is recognised by shape, not by `kind`.** A validator treats as a
 self-attested act every episode with `content.mode: none` that no episode
-names as its `container`, and every episode whose `content.ref` is an episode
-id, and applies the rules above to it whatever its `kind`. `activity` is the
+names as its `container`, and applies the rules above to it whatever its
+`kind`. `activity` is the
 recommended `kind` and stays descriptive. A container with `mode: none` is
 valid whatever its standpoint.
 
@@ -562,7 +645,8 @@ That is how a validator tells a redacted episode from a malformed one: an
 inline episode with no `text` and no `redacted` block listing it is rejected.
 
 **What can be redacted is a closed set:** `label`, `participants`, `place`,
-`content.text`, `content.ref`, `content.version`, `content.hash`. A writer
+`links`, `content.text`, `content.ref`, `content.version`, `content.hash`.
+`links` is redacted whole, never one link at a time. A writer
 refuses any other path and a validator rejects a file listing one. The set is
 closed because none of these is mirrored in the [index](#indexyaml), and sealed index segments never change, so a redaction
 must never change an entry. `id`, `kind`, `occurred`, `container`, `ordinal`,
@@ -626,9 +710,11 @@ an empty interval in the workspace is not that evidence.
               │ content.ref (trace)                   │ content.text (inline)
               │                                       ▼
           EPISODE ◀──── container ──── EPISODE (turn, message, attachment)
-              ▲
-              │  (informative: cited from outside the format)
-              │
+           ▲    ▲
+           │    └─────── links ─────── EPISODE (transcript, self-attested act)
+           │
+           │  (informative: cited from outside the format)
+           │
    DKF claim: source.document.ref = epi_…, quote = the words relied on
 ```
 
@@ -810,7 +896,7 @@ segments:
 entries:                       # minted in an open month
   - id: epi_01a1b4b2-3c1d-7e5a-9f02-6b8c4d2e1a37
     kind: message
-    occurred: {start: 2026-11-07T14:24:00, tz: Australia/Melbourne, basis: recorded}
+    occurred: {start: "2026-11-07T14:24:00+11:00[Australia/Melbourne]", basis: recorded}
     container: epi_01a1b4b1-8a20-7d43-b6e1-0c9f5a7d3e12
     ordinal: 7
     standpoint: https://github.com/benfortuna
@@ -832,9 +918,9 @@ of files in its month's directory, and a segment never changes once written.
 Each entry mirrors exactly `id`, `kind`, `occurred`, `container`, `ordinal`,
 `standpoint` and `timestamp`, which is what recall by time, by conversation and
 by speaker needs, and is also exactly the set redaction cannot touch. Nothing
-in `content`, `label`, `participants`, `place` or `source_status` enters the
-index, so each of them stays redactable or rewritable without changing a
-sealed segment.
+in `content`, `label`, `participants`, `place`, `links` or `source_status`
+enters the index, so each of them stays redactable or rewritable without
+changing a sealed segment.
 
 ---
 
@@ -872,9 +958,11 @@ than closed.
 
 - **Derived renderings of referenced media.** A voice memo in storage is
   referenced, but its transcript is the harness's own work and has no other
-  home. Is it a child episode with inline `transcribed` content, a second
-  `content` block, or outside the format? And when a better transcript is made
-  later, how does the new episode say which one it improves on?
+  home. [Links](#links) answer part of this: the transcript can be its own
+  inline `transcribed` episode, `via` the memo's episode, and a better one
+  later names it as `predecessor-version`. Whether a transcript should instead
+  be a child of the memo's episode, or a second `content` block, is still
+  open.
 - **Citing a span of a referenced source.** A claim's quote is checked by
   appearance, which survives a re-fetch. Whether the format should also define
   a fragment syntax for `ref` (a character range, a timecode, a page) is open,
@@ -899,10 +987,19 @@ than closed.
   replayed turn taking an `ordinal` already used. Recording "when something
   first cites" a thing implies a lookup by `content.ref`, which the index
   deliberately omits. Should `(container, ordinal)` be unique, should writers
-  avoid a second `(standpoint, content.ref)`, and once a duplicate exists, can
-  an appended, unindexed block say which episode it repeats? The same relation
-  may answer how a better transcript names the one it improves on. Refs that
-  alias one thing, such as a provider id and a `Message-ID`, are harder still.
+  avoid a second `(standpoint, content.ref)`, and once a duplicate exists, how
+  is it marked? A [link](#links) is where a writer that knows it is repeating
+  an episode could say so, but no registered relation fits (`duplicate` means
+  byte-identical representations), and two writers that each record one email
+  do not know of each other, while episodes are never revised to add a link
+  later. Refs that alias one thing, such as a provider id and a `Message-ID`,
+  are harder still.
+- **Uncertain and approximate dates.** `basis: inferred` with a date alone
+  covers "last Tuesday", but not "some time in March", "around 2019" or "the
+  week of the 9th". [EDTF](https://www.loc.gov/standards/datetime/) (ISO
+  8601-2) can write uncertainty, approximation and unspecified digits; whether
+  `occurred` should admit it, and what "nothing is recorded before it happens"
+  then means for an approximate date, is open.
 - **A container's end.** An episode is never recorded before it happens, and
   never revised, so a conversation recorded at its first turn carries no
   `occurred.end` and can never gain one. Its end can be read from its last
@@ -920,7 +1017,13 @@ than closed.
 **Standards borrowed as grammars.**
 [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) UUID version 7 for ids ·
 [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamps ·
-the [IANA time zone database](https://www.iana.org/time-zones) for `occurred.tz` ·
+[RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) date-times with a time-zone
+suffix for `occurred` ·
+the [IANA time zone database](https://www.iana.org/time-zones) for its zones ·
+[RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) Web Linking and the
+[IANA Link Relations registry](https://www.iana.org/assignments/link-relations/)
+for `links`, with `via` from [RFC 4287](https://www.rfc-editor.org/rfc/rfc4287)
+and `predecessor-version` from [RFC 5829](https://www.rfc-editor.org/rfc/rfc5829) ·
 [YAML 1.2](https://yaml.org/spec/1.2.2/) as the file format ·
 [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) SHA-256 for
 `content.hash`.

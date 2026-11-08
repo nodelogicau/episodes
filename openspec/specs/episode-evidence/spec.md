@@ -7,7 +7,7 @@ What an episode attests to and what it does not: episodes record only what has a
 ## Requirements
 
 ### Requirement: Nothing is recorded before it happens
-A writer SHALL NOT record an episode whose `occurred.start` is later than its recording instant (`timestamp`). If `occurred.end` is present, it SHALL NOT be later than the recording instant. Comparisons SHALL interpret `occurred` in its `tz`. A date-only `occurred` SHALL be compared as a date. A validator SHALL warn, naming the episode, wherever either bound is violated.
+A writer SHALL NOT record an episode whose `occurred.start` is later than its recording instant (`timestamp`). If `occurred.end` is present, it SHALL NOT be later than the recording instant. A date-time SHALL be compared as the instant its offset fixes. A date alone SHALL be compared as a date with the recording instant's date, taken in `tz` where `tz` is present, and otherwise in UTC with one day's allowance. A validator SHALL warn, naming the episode, wherever either bound is violated.
 
 #### Scenario: Recording a meeting before it starts
 - **WHEN** a harness at 09:00 tries to record an episode with `occurred.start` 14:00 the same day, in the same zone
@@ -21,9 +21,13 @@ A writer SHALL NOT record an episode whose `occurred.start` is later than its re
 - **WHEN** an episode recorded at 10:00 UTC states an `occurred.end` of 11:00 UTC
 - **THEN** a validator warns, naming the episode
 
-#### Scenario: A daylight-saving boundary
-- **WHEN** `occurred.start` is a local time in `Australia/Melbourne` on the day daylight saving begins
-- **THEN** the comparison with `timestamp` uses the offset in force at that local time
+#### Scenario: The repeated hour
+- **WHEN** an episode recorded at `2026-04-04T15:45:00Z` has `start: "2026-04-05T02:30:00+10:00[Australia/Melbourne]"` (16:30 UTC)
+- **THEN** a validator warns, because the offset puts the start after the recording, although the first 02:30 (`+11:00`, 15:30 UTC) would not have
+
+#### Scenario: A date alone with no zone
+- **WHEN** an episode recorded at `2026-11-07T22:00:00Z` has `start: "2026-11-08"` and no `tz`
+- **THEN** a validator does not warn, because the date is within one day of the recording's UTC date
 
 ### Requirement: `occurred` comes from the happening
 A writer SHALL take `occurred` from the happening the episode records: observed as it happened (`recorded`), stated by a source as the time of that happening (`stated`), or worked out from evidence (`inferred`). A writer SHALL NOT copy `occurred` from a plan, schedule or placement.
