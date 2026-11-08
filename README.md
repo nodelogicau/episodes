@@ -240,7 +240,7 @@ timestamp: 2026-11-07T03:24:40Z
 |---|---|---|
 | `id` | yes | `epi_` + UUIDv7. |
 | `type` | yes | Always `episode`. |
-| `kind` | yes | What sort of happening this is: `conversation`, `message`, `email`, `event`, `note`, `upload`, `call`, or another short lowercase word. **Descriptive only**: it drives display and filtering, never which fields are valid. A reader MUST NOT reject an unknown `kind`. |
+| `kind` | yes | What sort of happening this is: `conversation`, `message`, `email`, `event`, `note`, `upload`, `call`, `activity`, or another short lowercase word. **Descriptive only**: it drives display and filtering, never which fields are valid. A reader MUST NOT reject an unknown `kind`. |
 | `occurred` | yes | When it happened, below. |
 | `standpoint` | yes | A reference to the person or agent whose act, utterance or experience this records, below. |
 | `participants` | no | References to those present or addressed, sorted. May include the standpoint. |
@@ -248,7 +248,7 @@ timestamp: 2026-11-07T03:24:40Z
 | `label` | no | A short human-readable name for the episode, such as an email's subject or an event's title, captured when it is recorded. Not a summary. |
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
 | `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. |
-| `content` | yes | Where the record of it lives, below. A container with no content of its own carries `content: {mode: none}`. |
+| `content` | yes | Where the record of it lives, below. A container with no content of its own, and a self-attested act with nothing to hold its attestation, carry `content: {mode: none}`. |
 | `source` | yes | Who recorded it. |
 | `timestamp` | yes | When it was recorded. |
 | `source_status` | no | Whether referenced content can still be reached, below. |
@@ -408,8 +408,11 @@ carries the words it relies on as its own quote, so it stays verifiable without
 the episode store holding the message. (Informative: in DKF that quote is
 `source.document.quote`.)
 
-A container with nothing of its own, a conversation whose turns are its
-children, carries `content: {mode: none}`.
+`content: {mode: none}` is valid in exactly two cases: a container with nothing
+of its own, such as a conversation whose turns are its children, and a
+[self-attested act](#self-attested-acts) with nothing to hold its attestation.
+Writers SHOULD write a container together with its first child, so that a
+container is never seen without one.
 
 #### Containment
 
@@ -426,6 +429,74 @@ this email and its attachments".
 A child inherits nothing it does not state. In particular `standpoint` is
 stated on every turn of a conversation, because the speaker alternates and the
 distinction is what consolidation depends on.
+
+#### Self-attested acts
+
+Much of what a person does leaves no record: a solo block of deep work, a run,
+a phone call nobody logged. A **self-attested act** is the episode for one. It
+records something its standpoint did, its `occurred` is when the act took
+place, and its record is that person's own attestation that they did it.
+
+```yaml
+# episodes/2026-11/epi_01a1b875-0c28-7e19-a3d5-7c1b9f4e2a60.yaml
+id: epi_01a1b875-0c28-7e19-a3d5-7c1b9f4e2a60
+type: episode
+kind: activity
+occurred:
+  start: 2026-11-08T09:00:00
+  end: 2026-11-08T10:30:00
+  tz: Australia/Melbourne
+  basis: stated
+standpoint: https://github.com/benfortuna
+label: Deep work on the budget draft
+content:
+  mode: ref
+  ref: epi_01a1b874-e130-7b2c-9d41-3f6a8e0c5b27   # the turn: "log ninety minutes of deep work from nine"
+source:
+  author: https://github.com/benfortuna
+  harness: claude
+timestamp: 2026-11-08T00:00:41Z
+```
+
+Its `content` takes one of two forms:
+
+- **The attestation is an episode in the workspace,** such as the turn in which
+  the person asked for the act to be logged, or a note they wrote:
+  `{mode: ref, ref: <that episode's id>}`. A reader resolves an `epi_` ref in
+  its own workspace. No `hash` is needed, because episodes are not revised.
+- **Nothing holds the attestation,** as when the person presses a control whose
+  only purpose is to log the act: `{mode: none}`.
+
+**It is self-attestation only.** A self-attested act's `standpoint` MUST equal
+its `source.author`. When its `content` refs an episode that resolves in the
+workspace, that episode's `standpoint` MUST equal the act's. A ref that does
+not resolve, because its episode was redacted, dropped or never copied, is
+reported as unresolved and is not invalid. Someone else's act is never
+recorded this way: what Jane says she did is in the episode in which she says
+it, and is taken from there the way the [`standpoint`](#standpoint) section
+describes for notes.
+
+**It is recorded only on explicit attestation.** A writer MUST record a
+self-attested act only when its standpoint explicitly attests it, by asking
+for it to be recorded or through an action whose purpose is recording it, and
+MUST NOT record one from what it infers. A passing "finally got the budget
+done" is a turn and stays a turn; whatever is taken from it is an
+interpretation, outside this format. (Informative: in the family, that is a
+DKF claim citing the turn.) This keeps a harness a scribe and not an
+interpreter. No validator can check it, so it is a rule for writers.
+
+**It is recognised by shape, not by `kind`.** A validator treats as a
+self-attested act every episode with `content.mode: none` that no episode
+names as its `container`, and every episode whose `content.ref` is an episode
+id, and applies the rules above to it whatever its `kind`. `activity` is the
+recommended `kind` and stays descriptive. A container with `mode: none` is
+valid whatever its standpoint.
+
+**It is timed from the act.** `occurred` is when the act took place: `stated`
+when the person gave the time, `inferred` when it was worked out, as with
+"this morning". The rule that [nothing is recorded before it
+happens](#occurred) applies: a block logged at ten as "nine to half past ten"
+is recorded with its `start` and no `end`, or recorded once it is over.
 
 ### `source_status`
 
@@ -615,8 +686,8 @@ an event imported from someone else's calendar.
 
 ### When an episode is recorded
 
-The format says what an episode is, not when one must exist. Two practices are
-expected, and both are implementation choices:
+The format says what an episode is, not when one must exist. Three practices
+are expected, and all are implementation choices within the rules above:
 
 - **Inline content is recorded as it happens.** A conversation has no other
   home, so a harness that wants to cite it later records every turn when it is
@@ -626,6 +697,9 @@ expected, and both are implementation choices:
   something durable first cites the thing it points at, such as a claim, an
   intention or an explicit request to keep it, and write the episode and the
   citing object together so that neither exists without the other.
+- **A self-attested act is recorded when the person says so.** An act that left
+  no record is written on its standpoint's explicit request, never from what a
+  harness infers (see [Self-attested acts](#self-attested-acts)).
 
 Whether an episode that nothing cites any longer is kept or dropped is likewise
 the implementation's decision. Both practices leave gaps, which is why a
@@ -834,6 +908,10 @@ than closed.
   `occurred.end` and can never gain one. Its end can be read from its last
   turn. Should a container instead be allowed an appended, unindexed
   observation of its end, as `source_status` is appended for a source?
+- **A harness's own acts without a record.** A self-attested act is a
+  person's. Most of what a harness does leaves a record, a message or a tool
+  call, but not all of it. Whether a harness may attest its own acts, and
+  how a `standpoint` URI and `source.harness` would then be matched, is open.
 
 ---
 
