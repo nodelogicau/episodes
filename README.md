@@ -361,6 +361,7 @@ content:
   mode: inline
   media_type: text/markdown
   derivation: verbatim     # verbatim | transcribed | ocr | rendered
+  language: en-AU          # optional: only when known
   text: |
     …
 ```
@@ -385,6 +386,7 @@ content:
   version: "18f2c3a9b4d5e6f7"       # optional: the source's own version id
   hash: sha256:9f2a…                # optional: of the content as fetched
   media_type: message/rfc822        # optional; required with uid
+  language: en                      # optional: as the source stated it
 ```
 
 `ref` is a URI or an identifier meaningful to whatever can fetch it, and
@@ -477,7 +479,39 @@ the episode store holding the message. (Informative: in DKF that quote is
 of its own, such as a conversation whose turns are its children, and a
 [self-attested act](#self-attested-acts).
 Writers SHOULD write a container together with its first child, so that a
-container is never seen without one.
+container is never seen without one. Content with `mode: none` MUST NOT carry
+`language`.
+
+**`language` is the language of the content as recorded,** on an inline or a
+reference episode. It is one language tag, well-formed under
+[BCP 47](https://www.rfc-editor.org/info/bcp47): `en-AU`, `ja`, `zh-Hant-TW`.
+
+- **Known, never guessed.** A writer records `language` only when the source
+  states it, as mail's `Content-Language` header
+  ([RFC 3282](https://www.rfc-editor.org/rfc/rfc3282)), iCalendar's
+  `LANGUAGE` parameter or HTML's `lang` do, or when the harness produced the
+  text in a language it set: a recogniser told which language to expect, or
+  text rendered in a known language. A writer MUST NOT record a language that
+  language detection chose. A detected language is a judgement, and anything
+  that needs one can detect it from the text when it reads it. An interface's
+  locale is not the language of what was typed in it.
+- **On a reference episode,** `language` is the language the source stated
+  when the episode was recorded, captured as `label` is, and is not rewritten
+  if the source later says otherwise. It does not require `media_type`.
+- **On a transcript,** `language` is the language of the episode's own
+  `text`, not of the audio or image it was made from. The audio's language
+  belongs on the audio's own episode, which the transcript names as `via`. A
+  language the recogniser detected for itself is not recorded.
+- **One tag.** Content in more than one language is `mul`. A writer whose
+  source gives a list records its main language, or `mul` if none is. `und`
+  (undetermined) MUST NOT be written: a language that is not known is left
+  out.
+- **Case.** Writers MUST use the case
+  [RFC 5646 §2.1.1](https://www.rfc-editor.org/rfc/rfc5646#section-2.1.1)
+  recommends; readers MUST compare tags without regard to case. A validator
+  rejects a tag that is not well-formed, and MAY warn on, but MUST NOT reject,
+  a subtag missing from the
+  [IANA Language Subtag Registry](https://www.iana.org/assignments/language-subtag-registry/).
 
 #### Containment
 
@@ -689,7 +723,7 @@ inline episode with no `text` and no `redacted` block listing it is rejected.
 
 **What can be redacted is a closed set:** `label`, `participants`, `place`,
 `links`, `content.text`, `content.ref`, `content.uid`, `content.version`,
-`content.hash`.
+`content.hash`, `content.language`.
 `links` is redacted whole, never one link at a time. A writer
 refuses any other path and a validator rejects a file listing one. The set is
 closed because none of these is mirrored in the [index](#indexyaml), and sealed index segments never change, so a redaction
@@ -1007,6 +1041,12 @@ than closed.
   later names it as `predecessor-version`. Whether a transcript should instead
   be a child of the memo's episode, or a second `content` block, is still
   open.
+- **Translated transcripts.** A recogniser can write text in a language other
+  than the audio's, as Whisper's translate mode does. The text is then a
+  translation, which no `derivation` value says, and its
+  [`language`](#content) differs from the audio's episode. Whether
+  `derivation` should gain a `translated` value, or a translation be recorded
+  some other way, is open.
 - **Citing a span of a referenced source.** A claim's quote is checked by
   appearance, which survives a re-fetch. Whether the format should also define
   a fragment syntax for `ref` (a character range, a timecode, a page) is open,
@@ -1074,12 +1114,18 @@ for `links`, with `via` from [RFC 4287](https://www.rfc-editor.org/rfc/rfc4287)
 and `predecessor-version` from [RFC 5829](https://www.rfc-editor.org/rfc/rfc5829) ·
 [YAML 1.2](https://yaml.org/spec/1.2.2/) as the file format ·
 [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) SHA-256 for
-`content.hash`.
+`content.hash` ·
+[BCP 47](https://www.rfc-editor.org/info/bcp47) language tags for
+`content.language`, with the
+[IANA Language Subtag Registry](https://www.iana.org/assignments/language-subtag-registry/) ·
+[RFC 3282](https://www.rfc-editor.org/rfc/rfc3282) `Content-Language`, one
+source of a stated language.
 
 **Models.**
 [iCalendar](https://www.rfc-editor.org/rfc/rfc5545), whose `VJOURNAL`
 component is the oldest open format for a dated record of what happened, and
-whose `UID` is a calendar event's `content.uid` ·
+whose `UID` is a calendar event's `content.uid` and whose `LANGUAGE`
+parameter can state its `content.language` ·
 [W3C PROV-O](https://www.w3.org/TR/prov-o/), which separates an activity from
 the agents associated with it, as `standpoint` and `source` are separated here ·
 [Activity Streams 2.0](https://www.w3.org/TR/activitystreams-core/), an
