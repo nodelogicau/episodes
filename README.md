@@ -381,9 +381,10 @@ event in a calendar, a file in storage.
 content:
   mode: ref
   ref: gmail:msg_18f2c3a9b4d5e6f7
+  uid: mid:CAF3x9q@mail.example.com # optional: the content's own identifier
   version: "18f2c3a9b4d5e6f7"       # optional: the source's own version id
   hash: sha256:9f2a…                # optional: of the content as fetched
-  media_type: message/rfc822        # optional
+  media_type: message/rfc822        # optional; required with uid
 ```
 
 `ref` is a URI or an identifier meaningful to whatever can fetch it, and
@@ -392,6 +393,40 @@ workspace, and a relation between episodes is a [link](#links). `version`
 is the source's own notion of a version where it has one: a calendar event's
 sequence or ETag, a file's revision id. `hash` is what lets a later reader tell
 that what the pointer now returns is not what was recorded.
+
+**`uid` is what the content is; `ref` is where to fetch it.** A provider id
+names one copy in one account: it stops resolving when a mailbox moves, and
+two connectors recording one email give it two refs. `uid` is the identifier
+the content's own format assigns, which survives both. A writer records it
+whenever the source exposes one, and MUST write it as follows:
+
+- **Mail:** the `Message-ID` header
+  ([RFC 5322](https://www.rfc-editor.org/rfc/rfc5322)) as a `mid:` URI
+  ([RFC 2392](https://www.rfc-editor.org/rfc/rfc2392)), with the angle brackets
+  removed and the value percent-encoded as RFC 2392 requires:
+  `Message-ID: <CAF3x9q@mail.example.com>` is `uid: mid:CAF3x9q@mail.example.com`.
+- **iCalendar:** the `UID` property
+  ([RFC 5545](https://www.rfc-editor.org/rfc/rfc5545)), verbatim. A `UID` is
+  often not a URI (`7q2m4k9d0s1a@google.com`), and no URI scheme exists for it.
+- **Any other format** that assigns its content an identifier: that identifier,
+  as a URI where the format defines a URI form, and verbatim otherwise.
+
+`media_type` is required when `uid` is present, because it says which format's
+identifier `uid` is. A file or a web page has no identifier of its own format,
+and is recorded without `uid`; its `hash` is what says whether two copies are
+the same. `uid` never replaces `ref` as a locator, and `ref` is never taken as
+an identity. An inline episode MUST NOT carry `uid`: its identity is its
+episode id.
+
+`uid` is identity, not proof of it. A broken mailer can reuse a `Message-ID`,
+and every instance of a recurring event shares its series' `UID`, including an
+instance arranged on its own, which iCalendar tells apart only by
+`RECURRENCE-ID`. So episodes sharing a `uid` are possibly, never certainly, of
+one thing. A validator MAY report reference episodes that share `standpoint`,
+`media_type` and `uid` as possible duplicates, and MUST NOT reject them: both
+recordings are valid, and episodes are never revised to merge them. Episodes
+from different standpoints that share a `uid` are not duplicates; they are two
+people's records of one message.
 
 **A reference episode records the happening its source witnesses.** For mail,
 that is the sending: `occurred` is the `Date` header. For a file, it is the
@@ -409,7 +444,9 @@ label: Budget review with Jane
 content:
   mode: ref
   ref: gcal:evt_7q2m4k9d0s1a
+  uid: 7q2m4k9d0s1a@google.com
   version: "3"
+  media_type: text/calendar
 ```
 
 A calendar is a record of what was arranged, not of what took place. A
@@ -599,7 +636,13 @@ source_status:
 | `available` | Fetched, and the hash (if any) matches. |
 | `changed` | Fetched, and the hash or version no longer matches. Usual for calendar events and documents; mail does not change once sent. |
 | `unreachable` | Could not be fetched for a reason that may pass: access revoked, a connector disconnected, a network failure. Reversible. |
-| `gone` | Confirmed deleted at the source. |
+| `gone` | Confirmed deleted at the source: not found by `ref`, nor by `uid` where the episode has one. |
+
+A reader whose `ref` no longer resolves MAY search the source by `uid`, as
+after a move to a new mailbox. Content found that way is `available`, or
+`changed` if its hash or version differs, and is never `gone`. The episode's
+`ref` is not rewritten, since episodes are not revised; an implementation may
+keep its own map from `uid` to the new location, outside the format.
 
 The block is the one part of an episode that is rewritten in place, because it
 is an observation about the world outside the workspace, not about what
@@ -645,7 +688,8 @@ That is how a validator tells a redacted episode from a malformed one: an
 inline episode with no `text` and no `redacted` block listing it is rejected.
 
 **What can be redacted is a closed set:** `label`, `participants`, `place`,
-`links`, `content.text`, `content.ref`, `content.version`, `content.hash`.
+`links`, `content.text`, `content.ref`, `content.uid`, `content.version`,
+`content.hash`.
 `links` is redacted whole, never one link at a time. A writer
 refuses any other path and a validator rejects a file listing one. The set is
 closed because none of these is mirrored in the [index](#indexyaml), and sealed index segments never change, so a redaction
@@ -987,13 +1031,14 @@ than closed.
   replayed turn taking an `ordinal` already used. Recording "when something
   first cites" a thing implies a lookup by `content.ref`, which the index
   deliberately omits. Should `(container, ordinal)` be unique, should writers
-  avoid a second `(standpoint, content.ref)`, and once a duplicate exists, how
+  avoid a second `(standpoint, uid)`, and once a duplicate exists, how
   is it marked? A [link](#links) is where a writer that knows it is repeating
   an episode could say so, but no registered relation fits (`duplicate` means
   byte-identical representations), and two writers that each record one email
   do not know of each other, while episodes are never revised to add a link
-  later. Refs that alias one thing, such as a provider id and a `Message-ID`,
-  are harder still.
+  later. [`uid`](#content) makes refs that alias one thing detectable, and a
+  validator can report them; what a writer should do on finding one, before or
+  after recording, is still open.
 - **Uncertain and approximate dates.** `basis: inferred` with a date alone
   covers "last Tuesday", but not "some time in March", "around 2019" or "the
   week of the 9th". [EDTF](https://www.loc.gov/standards/datetime/) (ISO
@@ -1017,6 +1062,9 @@ than closed.
 **Standards borrowed as grammars.**
 [RFC 9562](https://www.rfc-editor.org/rfc/rfc9562) UUID version 7 for ids ·
 [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) timestamps ·
+[RFC 2392](https://www.rfc-editor.org/rfc/rfc2392) `mid:` URIs for the
+[RFC 5322](https://www.rfc-editor.org/rfc/rfc5322) `Message-ID` in
+`content.uid` ·
 [RFC 9557](https://www.rfc-editor.org/rfc/rfc9557) date-times with a time-zone
 suffix for `occurred` ·
 the [IANA time zone database](https://www.iana.org/time-zones) for its zones ·
@@ -1030,7 +1078,8 @@ and `predecessor-version` from [RFC 5829](https://www.rfc-editor.org/rfc/rfc5829
 
 **Models.**
 [iCalendar](https://www.rfc-editor.org/rfc/rfc5545), whose `VJOURNAL`
-component is the oldest open format for a dated record of what happened ·
+component is the oldest open format for a dated record of what happened, and
+whose `UID` is a calendar event's `content.uid` ·
 [W3C PROV-O](https://www.w3.org/TR/prov-o/), which separates an activity from
 the agents associated with it, as `standpoint` and `source` are separated here ·
 [Activity Streams 2.0](https://www.w3.org/TR/activitystreams-core/), an
