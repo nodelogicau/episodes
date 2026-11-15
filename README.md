@@ -171,6 +171,13 @@ this format; an `occasion` left by an earlier draft is such a field.
 Canonical order is what makes two implementations produce byte-identical files
 for identical episodes, and so what makes a workspace reviewable as a diff.
 
+Where this format has a writer sort strings, as it does for `participants`
+and `links`, the writer compares them by Unicode code point, as written, and
+a string that is a prefix of another comes first. That is the order of the
+strings' UTF-8 bytes. It is not the order of their UTF-16 code units, which
+is what Java and JavaScript compare by default: the two differ for characters
+above U+FFFF.
+
 ### Source and timestamp
 
 Every episode carries a `source` block and a `timestamp`. (Informative: this is
@@ -219,8 +226,8 @@ occurred:
   basis: recorded
 standpoint: https://github.com/benfortuna
 participants:
-  - https://github.com/benfortuna
   - https://claude.ai
+  - https://github.com/benfortuna
 container: epi_01a1b4b1-8a20-7d43-b6e1-0c9f5a7d3e12
 ordinal: 7
 content:
@@ -243,7 +250,7 @@ timestamp: 2026-11-07T03:24:40Z
 | `kind` | yes | What sort of happening this is: `conversation`, `message`, `email`, `event`, `note`, `upload`, `call`, `activity`, or another short lowercase word. **Descriptive only**: it drives display and filtering, never which fields are valid. A reader MUST NOT reject an unknown `kind`. |
 | `occurred` | yes | When it happened, below. |
 | `standpoint` | yes | A reference to the person or agent whose act, utterance or experience this records, below. |
-| `participants` | no | References to those present or addressed, sorted. May include the standpoint. |
+| `participants` | no | References to those present or addressed. May include the standpoint. Writers sort them by the comparison in [Field order](#field-order) and write each value once. Values are compared as written: a writer MUST NOT normalise a reference in order to compare or remove it, so `https://example.com/a` and `https://example.com/a/` are both kept. A reader MUST accept any order and repeated values; a validator MAY warn on either, and MUST NOT reject an episode for it. |
 | `place` | no | A reference to where it happened. |
 | `label` | no | A short human-readable name for the episode, such as an email's subject or an event's title, captured when it is recorded. Not a summary. |
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
@@ -286,7 +293,20 @@ transition from the instant of utterance, and only a zone allows that.
 - **No other suffixes.** Writers MUST NOT write RFC 9557's critical flag (`!`)
   or any suffix but the zone. Readers MUST ignore an elective suffix they do
   not implement, such as `[u-ca=gregory]`, and MUST treat as invalid an episode
-  with a critical suffix they cannot honour.
+  with a critical suffix they cannot honour. A writer given a value that
+  carries a suffix it may not write does one of three things:
+  - **An elective suffix other than the zone** is dropped, and the rest of
+    the value is recorded. Given
+    `2026-11-07T14:24:00+11:00[Australia/Melbourne][u-ca=gregory]`, a writer
+    records `"2026-11-07T14:24:00+11:00[Australia/Melbourne]"`.
+  - **A critical suffix other than the zone,** such as `[!u-ca=hebrew]`, is
+    refused. The writer MUST NOT record the value, because the source has
+    said it cannot be read correctly without the suffix.
+  - **A critical flag on the zone,** as in `[!Australia/Melbourne]`, is
+    honoured by checking the offset against the zone's rules at that local
+    time. When they agree, the writer records the value without the flag.
+    When they disagree, or the writer does not know the zone, it MUST refuse
+    the value.
 - **A date alone is valid** when the time is unknown: `"2026-11-03"`. RFC 9557
   gives a date no suffix, so a date alone MAY be accompanied by `tz`, an IANA
   zone name, saying where the date is reckoned. `tz` MUST NOT appear beside a
@@ -512,6 +532,12 @@ reference episode. It is one language tag, well-formed under
   rejects a tag that is not well-formed, and MAY warn on, but MUST NOT reject,
   a subtag missing from the
   [IANA Language Subtag Registry](https://www.iana.org/assignments/language-subtag-registry/).
+  Well-formed means that the tag matches the grammar of
+  [RFC 5646 §2.1](https://www.rfc-editor.org/rfc/rfc5646#section-2.1), which
+  is checked without the registry. `en_AU` is not well-formed, and is
+  rejected. `english` is well-formed, as a primary language subtag of seven
+  letters, though it names no language: it is valid, and a validator MAY warn
+  on it.
 
 #### Containment
 
@@ -546,11 +572,24 @@ links:
 Each link has exactly `rel` and `href`. `rel` is a relation type registered in
 the [IANA Link Relations registry](https://www.iana.org/assignments/link-relations/),
 written in lowercase and used in its registered meaning, or an absolute URI,
-which is how RFC 8288 lets anyone define a relation without a registry. A
-`rel` that is neither is invalid. `href` is an episode id, resolved within the
-workspace, or a URI. Writers sort `links` by `rel` and then by `href`. A reader
-MUST NOT reject an episode for a `rel` it does not know, and gives it no
-meaning.
+which is how RFC 8288 lets anyone define a relation without a registry.
+`href` is an episode id, resolved within the workspace, or a URI. Writers sort
+`links` by `rel` and then by `href`, each by the comparison in
+[Field order](#field-order). A reader MUST NOT reject an episode for a `rel`
+it does not know, and gives it no meaning.
+
+Whether a relation is registered depends on which copy of the registry is
+consulted, so validity does not turn on it:
+
+- A writer MUST NOT write a `rel` that is neither registered nor an absolute
+  URI. A mistyped relation is refused when it is written, which is when it
+  can be fixed.
+- A validator warns on, and MUST NOT reject, a `rel` that has the form RFC
+  8288 gives a registered relation type (a lowercase letter followed by
+  lowercase letters, digits, `.` or `-`) and is missing from its copy of the
+  registry. The warning names the link.
+- Only a `rel` that is neither of that form nor an absolute URI is invalid:
+  `Answers`, or `my relation`.
 
 Two registered relations have a meaning between episodes:
 
