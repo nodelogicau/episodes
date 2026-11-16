@@ -3,11 +3,9 @@
 ## Purpose
 
 The language of an episode's content as recorded, `content.language`: one BCP 47 tag, recorded only when the source states it or the harness set it, never from detection. On a transcript it is the language of the text, not the audio. Introduced by change `content-language`.
-
 ## Requirements
-
 ### Requirement: `content.language` holds one BCP 47 tag
-An inline or reference episode MAY carry `content.language`, the language of its content as recorded. Its value SHALL be one language tag that is well-formed under BCP 47 (RFC 5646). Content in more than one language SHALL use the tag `mul`. A writer SHALL NOT write `und`; a language that is not known SHALL be left out.
+An inline or reference episode MAY carry `content.language`, the language of its content as recorded. Its value SHALL be one language tag that is well-formed under BCP 47 (RFC 5646). Well-formed SHALL mean that the tag matches the grammar of RFC 5646 §2.1, which can be checked without the IANA Language Subtag Registry. Content in more than one language SHALL use the tag `mul`. A writer SHALL NOT write `und`; a language that is not known SHALL be left out.
 
 #### Scenario: A rendered summary
 - **WHEN** a harness records text it rendered from structured data in Australian English
@@ -22,8 +20,12 @@ An inline or reference episode MAY carry `content.language`, the language of its
 - **THEN** a validator rejects it, naming the field
 
 #### Scenario: An ill-formed tag
-- **WHEN** an episode carries `content.language: english`
+- **WHEN** an episode carries `content.language: en_AU`
 - **THEN** a validator rejects it, naming the field
+
+#### Scenario: A well-formed tag that names no language
+- **WHEN** an episode carries `content.language: english`, which matches the grammar as a primary language subtag of seven letters and is not in the registry
+- **THEN** the episode is valid, and a validator may warn
 
 ### Requirement: `language` is recorded only when known
 A writer SHALL record `content.language` only when the source states the language, or when the harness produced the text in a language it set. A writer SHALL NOT record a language chosen by language detection.
@@ -78,3 +80,4 @@ Writers SHALL write tags in the case RFC 5646 §2.1.1 recommends. Readers SHALL 
 #### Scenario: Withdrawing an inline episode
 - **WHEN** a person redacts `content.text` from an episode carrying `content.language`
 - **THEN** `language` stays unless `redacted.fields` also lists `content.language`, and no index entry changes
+
