@@ -263,7 +263,7 @@ timestamp: 2026-11-07T03:24:40Z
 | `place` | no | A reference to where it happened. |
 | `label` | no | A short human-readable name for the episode, such as an email's subject or an event's title, captured when it is recorded. Not a summary. |
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
-| `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. |
+| `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. How a writer chooses one, and how readers order by it, is under [Containment](#containment). |
 | `links` | no | Typed links to earlier episodes or to outside resources, below. |
 | `content` | yes | Where the record of it lives, below. A container with no content of its own carries `content: {mode: none}`, and a self-attested act `content: {mode: attested}`. |
 | `source` | yes | Who recorded it. |
@@ -426,7 +426,7 @@ content:
   ref: gmail:msg_18f2c3a9b4d5e6f7
   uid: mid:CAF3x9q@mail.example.com # optional: the content's own identifier
   version: "18f2c3a9b4d5e6f7"       # optional: the source's own version id
-  hash: sha256:9f2a…                # optional: of the content as fetched
+  hash: sha256:9f2a…                # optional: of the representation media_type names
   media_type: message/rfc822        # optional; required with uid
   language: en                      # optional: as the source stated it
 ```
@@ -472,6 +472,17 @@ recordings are valid, and episodes are never revised to merge them. Episodes
 from different standpoints that share a `uid` are not duplicates; they are two
 people's records of one message.
 
+**A writer avoids a second recording of the same content.** A writer that can
+see the workspace SHOULD NOT record a reference episode whose `standpoint`,
+`media_type` and `uid` all equal those of an existing reference episode,
+unless it is told explicitly that the content is a distinct thing, as an
+instance of a recurring event is. The writer does not judge that for itself:
+its caller says so. A writer that declines SHOULD name the existing episode,
+so that whatever asked can cite it. This is a SHOULD and not a MUST because
+`uid` is not in the index, so finding a match means reading episode files,
+and because two machines cannot see each other's writes. A second such
+episode stays valid.
+
 **A reference episode records the happening its source witnesses.** For mail,
 that is the sending: `occurred` is the `Date` header. For a file, it is the
 upload or the writing. For a calendar event, it is the **arranging**: the
@@ -501,11 +512,36 @@ transcript, attendance from the system that hosted it. Read this way, a
 calendar episode is true when it is recorded and can be recorded at any time
 after the arranging, including before the meeting.
 
-`hash` is written `<algorithm>:<digest>`. It is taken over the content as
-fetched, with CRLF sequences normalised to LF and *nothing else* altered: not
-trailing whitespace, not Unicode normalisation form, not a final newline. Line endings are an artefact of transport and differ
-by platform; everything else differs because someone changed the content, and
-the check must see it. Writers MUST write `sha256`. Readers MUST accept any
+`hash` is written `<algorithm>:<digest>`. It is taken over the representation
+that `media_type` names:
+
+- **`message/rfc822`:** the complete raw message, headers and body, as the
+  mailbox stores it.
+- **`text/calendar`:** the iCalendar object that holds the event, as the
+  calendar store returns it.
+- **Any other media type:** the bytes of the content in that representation.
+- **No `media_type`:** the bytes that `ref` returns. A writer SHOULD write
+  `media_type` whenever it writes `hash`.
+
+**A writer without those bytes writes no `hash`.** A writer that holds only a
+provider's own rendering of the content, such as an API's JSON for a message,
+MUST NOT write a hash of it. It leaves `hash` out, and records `version`
+where the source has one. A hash exists to be compared with a later fetch,
+and a hash of other bytes would make every reader that checks it see a change
+that never happened.
+
+**A hash identifies one stored copy.** It is of the copy the episode's `ref`
+points at. Copies of one message held by different people differ, because
+each mailbox adds its own `Received` headers on delivery, so their hashes
+differ too. A reader MUST NOT conclude from differing hashes that episodes
+with different standpoints record different content: across copies, the
+identity is `uid`.
+
+The bytes are hashed with CRLF sequences normalised to LF and *nothing else*
+altered: not trailing whitespace, not Unicode normalisation form, not a final
+newline. Line endings are an artefact of transport and differ by platform;
+everything else differs because someone changed the content, and the check
+must see it. Writers MUST write `sha256`. Readers MUST accept any
 `<algorithm>:<digest>` and MUST report an algorithm they do not implement as
 unverified, never as invalid. (Informative: this is DKF's rule, so a DKF claim
 and the episode it cites can carry the same hash.)
@@ -605,6 +641,34 @@ without its conversation.
 meeting can name the [act](#self-attested-acts) as their `container`. It is
 still an act, and each child is an ordinary episode with its own standpoint
 and content.
+
+**A writer does not reuse an `ordinal`.** A writer MUST NOT write an episode
+whose `container` and `ordinal` both equal those of another episode it can
+see in the workspace. Two turns cannot both be seventh. A writer asked for
+one refuses, naming the existing episode.
+
+**An `ordinal` is the source's position, or the next one.** Where the source
+gives its parts positions, as the pages of a document or the attachments of
+an email do, a writer MUST write those positions, counted from 1: page 5 of a
+scan is `ordinal: 5` whether or not pages 3 and 4 were recorded. Otherwise a
+writer MUST write one more than the highest `ordinal` held by an episode in
+the container, and 1 when none holds one. It is the highest and not the count
+of children, which after a gap could land on an `ordinal` in use. Gaps are
+valid.
+
+**A repeated `ordinal` is reported, not invalid.** A validator warns, naming
+both episodes, when two episodes share a `container` and an `ordinal`, and
+MUST NOT reject either. Two branches can each record the next turn of one
+conversation with the same `ordinal`, and they merge without conflict because
+each turn is its own file. Episodes are never revised, so nothing could
+repair the result if it were invalid.
+
+**Children are ordered by `ordinal`, then by id.** A reader that presents the
+children of a container in order MUST order them by ascending `ordinal`, and
+those that share an `ordinal` by id, compared as in
+[Field order](#field-order). Children with no `ordinal` follow those with
+one, ordered by id. Every reader then shows the same order, including where
+an `ordinal` repeats.
 
 #### Links
 
@@ -1180,19 +1244,19 @@ than closed.
   would have to be one this format restates or can do without.
 - **Duplicate recordings.** Two episodes of one happening from different
   standpoints are not duplicates, and whether they are the same event is a DKF
-  claim. The same recording made twice is: on-demand recording that runs again,
-  two machines recording one email and merging cleanly under different ids, a
-  replayed turn taking an `ordinal` already used. Recording "when something
-  first cites" a thing implies a lookup by `content.ref`, which the index
-  deliberately omits. Should `(container, ordinal)` be unique, should writers
-  avoid a second `(standpoint, uid)`, and once a duplicate exists, how
-  is it marked? A [link](#links) is where a writer that knows it is repeating
-  an episode could say so, but no registered relation fits (`duplicate` means
-  byte-identical representations), and two writers that each record one email
-  do not know of each other, while episodes are never revised to add a link
-  later. [`uid`](#content) makes refs that alias one thing detectable, and a
-  validator can report them; what a writer should do on finding one, before or
-  after recording, is still open.
+  claim. The same recording made twice is. A writer avoids one where it can
+  see it: it does not reuse an `ordinal` (see [Containment](#containment)),
+  and it avoids a second reference episode with the same `standpoint`,
+  `media_type` and `uid` (see [`content`](#content)). Two questions remain:
+  - **How an existing duplicate is marked.** Two machines can each record one
+    email and merge cleanly under different ids, and a validator can report
+    the pair. A [link](#links) is where a writer that knows it is repeating
+    an episode could say so, but no registered relation fits (`duplicate`
+    means byte-identical representations), and episodes are never revised to
+    add a link later.
+  - **Content with no `uid`.** A file or a web page has only its `ref` and
+    its `hash`, and neither is in the index. What a writer does about a
+    second recording of one is open.
 - **Uncertain and approximate dates.** `basis: inferred` with a date alone
   covers "last Tuesday", but not "some time in March", "around 2019" or "the
   week of the 9th". [EDTF](https://www.loc.gov/standards/datetime/) (ISO
