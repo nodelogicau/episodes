@@ -1,8 +1,8 @@
 # Episodes Format
 
 An open format for episodic memory: what happened, when and where, from whose
-standpoint, and where the record of it lives. Designed to be written by AI
-harnesses, reviewed by people through git, and cited by the
+standpoint, and where the record of it lives. Designed to be written by
+harnesses and connectors, reviewed by people through git, and cited by the
 [Dialectical Knowledge Format](https://github.com/nodelogicau/particulars) and
 [intentions](https://github.com/nodelogicau/intentions) by reference rather
 than by shared schema.
@@ -186,8 +186,8 @@ the same shape DKF and intentions use, so one harness can write all three.)
 ```yaml
 source:
   author: https://github.com/benfortuna   # on whose behalf this was recorded
-  harness: claude                          # optional: the harness that recorded it
-  model: claude-opus-5-5                   # optional: the model
+  harness: claude                          # optional: the software that recorded it
+  model: claude-opus-5-5                   # optional: only when a model took part
 timestamp: 2026-11-07T06:09:18Z            # recording time, RFC 3339 UTC
 ```
 
@@ -195,6 +195,15 @@ timestamp: 2026-11-07T06:09:18Z            # recording time, RFC 3339 UTC
 `author` or `harness`; a harness recording a conversation on its own is a valid
 source. `author` is a **reference**: the person or agent on whose behalf the
 episode was recorded.
+
+`harness` names the software that recorded the episode, whether an AI harness
+or a connector such as `gmail-sync`. `model` is present only when a model took
+part in recording the episode, and a writer MUST NOT write it otherwise: a
+harness that records a calendar event by parsing it, with no model call,
+writes `harness` and no `model`. (Informative: a connector is a writer that
+parses a source, such as a mailbox or a calendar, deterministically. Recording
+a reference episode needs no model: a job that reads a message's headers and
+writes an episode from them is a conformant writer.)
 
 A reference, here and in `standpoint`, `participants` and `place`, is a URI
 where one is known, and otherwise a string that identifies a person, agent or
@@ -256,7 +265,7 @@ timestamp: 2026-11-07T03:24:40Z
 | `container` | no | The episode this one is part of: a conversation for its turns, a thread for its messages, an email for its attachments. |
 | `ordinal` | no | Position within `container`, an integer from 1. Required when `container` is present and order is meaningful. |
 | `links` | no | Typed links to earlier episodes or to outside resources, below. |
-| `content` | yes | Where the record of it lives, below. A container with no content of its own, and a self-attested act, carry `content: {mode: none}`. |
+| `content` | yes | Where the record of it lives, below. A container with no content of its own carries `content: {mode: none}`, and a self-attested act `content: {mode: attested}`. |
 | `source` | yes | Who recorded it. |
 | `timestamp` | yes | When it was recorded. |
 | `source_status` | no | Whether referenced content can still be reached, below. |
@@ -368,9 +377,22 @@ The standpoint is a reference, as defined under
 [Source and timestamp](#source-and-timestamp). A harness speaking in a
 conversation is a participant like any other and has a reference of its own.
 
+A container with nothing of its own, one with `content: {mode: none}`, is its
+keeper's: its `standpoint` is the person or agent whose record the container
+is. That is the person for a conversation with a harness, and the mailbox
+owner for a mail thread. It says nothing about who spoke or acted within the
+container: each child states its own `standpoint`, and a reader that finds a
+conversation under a person's standpoint does not conclude that the person
+spoke every turn in it. A container with content of its own keeps the
+standpoint its content gives it: an email that contains its attachments is
+its sender's, as any email is.
+
 #### `content`
 
-Content has two modes, decided by whether the record has another home.
+Content has four modes, each an answer to where the record of the happening
+lives: `inline`, it is here; `ref`, it is elsewhere; `none`, the episode has
+no record of its own because its children do; `attested`, the record is the
+standpoint's own word.
 
 **Inline** is for content this workspace is the origin of: a conversation turn,
 a typed note, a transcript the harness made itself. The episode is the only
@@ -495,12 +517,16 @@ carries the words it relies on as its own quote, so it stays verifiable without
 the episode store holding the message. (Informative: in DKF that quote is
 `source.document.quote`.)
 
-`content: {mode: none}` is valid in exactly two cases: a container with nothing
-of its own, such as a conversation whose turns are its children, and a
-[self-attested act](#self-attested-acts).
-Writers SHOULD write a container together with its first child, so that a
-container is never seen without one. Content with `mode: none` MUST NOT carry
-`language`.
+**None** is a container with nothing of its own, such as a conversation whose
+turns are its children, and means only that (see
+[Containment](#containment)). Writers SHOULD write a container together with
+its first child, so that a container is not seen without one.
+
+**Attested** is a [self-attested act](#self-attested-acts): the record is the
+standpoint's own attestation that they did it. Its `content` is exactly
+`{mode: attested}`, with no other key.
+
+Content with `mode: none` or `mode: attested` MUST NOT carry `language`.
 
 **`language` is the language of the content as recorded,** on an inline or a
 reference episode. It is one language tag, well-formed under
@@ -554,6 +580,31 @@ this email and its attachments".
 A child inherits nothing it does not state. In particular `standpoint` is
 stated on every turn of a conversation, because the speaker alternates and the
 distinction is what consolidation depends on.
+
+**A container with nothing of its own carries `content: {mode: none}`.** It
+is valid whatever its `standpoint`, and whether or not any episode names it
+as `container`. A validator warns, naming the episode, on one that no episode
+in the workspace names as `container`, and MUST NOT reject it. A container is
+not meant to stay empty, but a crash or a partial copy can leave one so, and
+the remedy is to write a child, which changes no existing file.
+
+**A container is recorded before its children.** A writer MUST record a
+container before any episode that names it as `container`. A validator warns,
+naming the child, when the child's id and its container's id are both UUIDv7
+and the container's sorts later, and makes no check when either id is not a
+UUIDv7. It warns rather than fails because clocks on two machines can
+disagree.
+
+**A `container` that does not resolve is reported, not invalid.** A
+`container` whose episode id does not resolve in the workspace, because the
+container was dropped or never copied, is reported as unresolved and does not
+make the episode invalid, as for [links](#links). A turn is still a turn
+without its conversation.
+
+**A self-attested act may be a container.** Notes written during a logged
+meeting can name the [act](#self-attested-acts) as their `container`. It is
+still an act, and each child is an ordinary episode with its own standpoint
+and content.
 
 #### Links
 
@@ -646,19 +697,26 @@ links:
   - rel: via
     href: epi_01a1b874-e130-7b2c-9d41-3f6a8e0c5b27   # the turn: "log ninety minutes of deep work from nine"
 content:
-  mode: none
+  mode: attested
 source:
   author: https://github.com/benfortuna
   harness: claude
 timestamp: 2026-11-08T00:00:41Z
 ```
 
-Its `content` is always `{mode: none}`: the act itself left no record. When
-the attestation is an episode in the workspace, such as the turn in which the
-person asked for the act to be logged, or a note they wrote, the act names it
-with a [`via` link](#links). When nothing holds the attestation, as when the
-person presses a control whose only purpose is to log the act, the act has no
-`via` link.
+Its `content` is exactly `{mode: attested}`, with no other key: the act
+itself left no record, and what stands for one is the person's word.
+
+**It names its attestation whenever the writer recorded one.** When an act is
+attested in an episode the writer records, which includes every attestation
+made in a conversation the writer is recording, the writer MUST record that
+episode and MUST link the act to it with a [`via` link](#links). A writer
+MUST NOT omit the link by leaving the attesting episode unrecorded. When
+nothing the writer records holds the attestation, as when the person presses
+a control whose only purpose is to log the act, the act has no `via` link.
+The rule does not depend on `source.harness`: a "log my run" button is a
+dedicated control whether a harness or a connector implements it. No
+validator can check this in general, so it is a rule for writers.
 
 **It is self-attestation only.** A self-attested act's `standpoint` MUST equal
 its `source.author`. When it links `via` an episode that resolves in the
@@ -678,12 +736,17 @@ interpretation, outside this format. (Informative: in the family, that is a
 DKF claim citing the turn.) This keeps a harness a scribe and not an
 interpreter. No validator can check it, so it is a rule for writers.
 
-**It is recognised by shape, not by `kind`.** A validator treats as a
-self-attested act every episode with `content.mode: none` that no episode
-names as its `container`, and applies the rules above to it whatever its
-`kind`. `activity` is the
-recommended `kind` and stays descriptive. A container with `mode: none` is
-valid whatever its standpoint.
+**It is recognised by its mode, not by `kind` or by shape.** A validator
+treats as a self-attested act every episode with `content.mode: attested`,
+and no other, and applies the rules above to it whatever its `kind` and
+whether or not any episode names it as its `container`. `activity` is the
+recommended `kind` and stays descriptive.
+
+An earlier draft gave an act `content: {mode: none}` and recognised it by
+having no children. An act written that way now reads as a container with no
+children: it is valid, a validator warns on it, and the rules of this section
+no longer apply to it. Episodes are not rewritten, so no conversion is
+defined.
 
 **It is timed from the act.** `occurred` is when the act took place: `stated`
 when the person gave the time, `inferred` when it was worked out, as with
@@ -903,6 +966,18 @@ are expected, and all are implementation choices within the rules above:
 - **A self-attested act is recorded when the person says so.** An act that left
   no record is written on its standpoint's explicit request, never from what a
   harness infers (see [Self-attested acts](#self-attested-acts)).
+
+Recording is the first of three steps, and the only one that belongs to this
+format:
+
+- **Recording** writes an episode from a source. It is parsing, and needs no
+  model.
+- **Selection** decides which episodes merit interpretation.
+- **Consolidation** turns the selected episodes into another format's
+  objects, such as DKF claims.
+
+A message does not have to pass through a model to become an episode, and an
+implementation that records episodes and does nothing else with them conforms.
 
 Whether an episode that nothing cites any longer is kept or dropped is likewise
 the implementation's decision. Both practices leave gaps, which is why a
