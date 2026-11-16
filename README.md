@@ -899,18 +899,51 @@ the fact that one person addressed another at a given time can itself be what
 someone wants forgotten, and it is left to a later version that can mask index
 entries.
 
+**Redacting `content.ref` redacts everything that locates or identifies the
+content.** A `redacted` block that lists `content.ref` MUST also list each of
+`content.uid`, `content.version`, `content.hash` and `links` that the episode
+carries, and each is absent from the file. A writer asked to redact
+`content.ref` redacts them in the same act. A validator rejects a file whose
+block lists `content.ref` while any of the four is present, naming the field.
+Each of them can lead back to the content:
+
+- **`content.uid`** is how the content is found again when `ref` stops
+  resolving.
+- **`content.version`** is the source's own id for a version, and is often
+  the id that `ref` carries.
+- **`content.hash`** lets anyone holding a candidate confirm that it is the
+  content.
+- **`links`** can hold the location as an `href`, as a link to an archived
+  copy does, and is redacted whole.
+
+Each of the four stays redactable on its own, without `content.ref`. The cost
+of the rule is a link that disclosed nothing, lost now and then.
+
+An episode whose `content.ref` was redacted under an earlier draft, and which
+still carries one of the four, is repaired by redacting the fields left
+behind: redacting again adds them to the block.
+
 **Redacting `content.text` withdraws an inline episode.** It carries no record,
 so it is out of recall, and anything that quotes it can no longer be checked
-against it. Redacting `content.ref` leaves a reference episode as a bare tombstone: it says that
-something of this kind happened at this time from this standpoint, and no
-longer where.
+against it.
+
+**Redacting `content.ref` leaves a reference episode as a tombstone.** It says
+that something of this kind happened at this time from this standpoint, and
+no longer where. The episode keeps its `id`, `kind`, `occurred`,
+`standpoint`, `container`, `ordinal` and `timestamp`, its `content.mode` and
+`content.media_type`, and whichever of `label`, `participants`, `place` and
+`content.language` were not redacted as well. Those four are redacted only
+when the person lists them: a `label` can say where a document is, and
+whether it does is theirs to judge.
 
 **It is irreversible and never implicit.** The block is never removed and a
 redacted field is never restored. A file carries at most one `redacted` block;
 redacting again replaces its `timestamp`, `reason` and `source` and makes
 `fields` the union of old and new. Nothing redacts as a side effect: not a
 source being deleted, not anything that cites the episode being withdrawn or
-redacted.
+redacted. The fields that go with `content.ref` are not a side effect either.
+They are one redaction with a defined extent, and every field it removes is
+named in `fields`.
 
 **Redaction does not cascade.** Redacting an episode changes no other episode,
 not its container and not its children, and no object outside the workspace.
@@ -921,10 +954,33 @@ claims citing it" as one action, provided it writes a separate `redacted`
 block on each object it changes. Redacting a claim changes no episode.)
 
 **What redaction does not remove.** It removes text from the current file and
-from what a conformant implementation reads, recalls, serves and embeds; an
-implementation that keeps embeddings deletes those of a redacted field,
-because an embedding can disclose what it was computed from. It does not
-remove the text from version control, clones or earlier fetches. Inline
+from what a conformant implementation reads, recalls, serves and embeds.
+
+That reaches every value derived from a redacted field, because a derived
+value can disclose what it was computed from. An implementation that keeps
+values derived from an episode's fields MUST, when a field is redacted,
+delete each value derived from it or compute the value again without it.
+Derived values include embeddings, classifier and other model outputs,
+summaries and extractions, and search indexes. A value is derived from a
+field when computing it again without that field could change it: a summary
+computed from `label` and `content.text` is derived from both, and a count of
+an episode's children is derived from no redactable field and is kept.
+
+An implementation MUST NOT read, return, rank by or otherwise use a value
+derived from a field that the episode's file lists as redacted, whether or
+not the value has been deleted yet. It decides this from the episode file,
+not from the state of its own stores. A redaction made on one machine reaches
+another as a changed file, before that machine's stores are updated, and in
+that interval a query must not return an episode on the strength of an
+embedding of its redacted label.
+
+(Informative: a judgement written as an object of another format, such as a
+DKF claim citing the episode, is not a derived value under these rules. It is
+a record with its own author and its own redaction, governed by that format,
+which is why redaction does not cascade.)
+
+Redaction does not remove the text from version control, clones or earlier
+fetches. Inline
 episodes are whole conversations, so in a git workspace the text of every
 redacted turn stays in history, and an implementation whose store is a git
 repository MUST say so when it redacts. An implementation whose store controls
