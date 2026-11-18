@@ -1090,7 +1090,9 @@ value can disclose what it was computed from. An implementation that keeps
 values derived from an episode's fields MUST, when a field is redacted,
 delete each value derived from it or compute the value again without it.
 Derived values include embeddings, classifier and other model outputs,
-summaries and extractions, and search indexes. A value is derived from a
+summaries and extractions, and search indexes. ([Recall by
+query](#recall-by-query) says where such caches are kept and how a query
+uses them.) A value is derived from a
 field when computing it again without that field could change it: a summary
 computed from `label` and `content.text` is derived from both, and a count of
 an episode's children is derived from no redactable field and is kept.
@@ -1376,10 +1378,211 @@ between two episodes, so that two indexes of the same files could differ.
 
 Each entry mirrors exactly `id`, `kind`, `occurred`, `container`, `ordinal`,
 `standpoint` and `timestamp`, which is what recall by time, by conversation and
-by speaker needs, and is also exactly the set redaction cannot touch. Nothing
+by speaker needs, and is also exactly the set redaction cannot touch. Recall
+by participant and [by query](#recall-by-query) read the episode files as
+well. Nothing
 in `content`, `label`, `participants`, `place`, `links` or `source_status`
 enters the index, so each of them stays redactable or rewritable without
 changing a sealed segment.
+
+### Recall by query
+
+An implementation need not answer free-text queries: one that reads, writes
+and validates episodes conforms without doing so. An implementation that
+does answer them follows the rules in this section. (Informative: they are
+restated from DKF's
+[*Recall by query*](https://github.com/nodelogicau/particulars#recall-by-query),
+adapted to episodes, so that a fix to one copy shows as a difference to check
+in the other.)
+
+**A query resolves to episodes.** Each result is one episode. An episode is
+never returned because another matched, so a container is a result only when
+its own text matched or a stage proposed it, and not because one of its
+children did. Every result carries `container`, from the index, so a reader
+that wants results grouped by conversation can group them with no file
+opened.
+
+**The baseline.** Every implementation that answers a query resolves it
+without a model, as follows, on every query:
+
+- Whitespace, by the Unicode `White_Space` property, is trimmed from the
+  edges of the query. The query's terms are its runs of non-whitespace
+  characters.
+- From each term, and from the whole query, the leading and trailing
+  characters of Unicode general category P (punctuation) are removed, as
+  written and before folding. Interior characters are kept: `timeout?`
+  becomes `timeout`, and `v1.2.3.` becomes `v1.2.3`, while `o'brien` and
+  `auth/session` stay as written.
+- A term that is empty after trimming is ignored. A query that is empty
+  after trimming, such as `?!`, resolves nothing, and that is not an error.
+- A text matches when the trimmed whole query, or any one trimmed term,
+  occurs in it under Unicode case folding. Terms combine by OR, since AND
+  would make `what is the session timeout` find nothing.
+- The texts are an episode's `label`, and the `content.text` of an inline
+  episode. The content of a reference episode is not among them: the
+  workspace does not hold it, and a baseline that fetched every mail on every
+  query would not be one. `participants` is not among them either: a name is
+  rarely in a reference such as a `mailto:` or a profile URL, and it has a
+  filter of its own, below.
+- An episode also matches when a term, before or after trimming, equals its
+  `content.uid` exactly, with no folding, so that `mid:…` finds its mail. A
+  Message-ID can end in punctuation that is part of it, and a question in
+  punctuation that is not, and trying both covers each. The match is
+  equality and not substring, because identifiers are compared as written
+  everywhere else in the format, and a substring would match every mail from
+  one host.
+
+The baseline applies no stemming, no stopwords and no other change to terms:
+`dog's` does not find "the dog barked". It is linear in history, since it
+reads every label and every inline text.
+
+**Other stages only add.** An implementation MAY run other stages, such as a
+semantic stage. A stage other than the baseline MAY add episodes and MUST
+NOT remove one the baseline found. Embeddings are weak at exact identifiers,
+a ticket number or a surname, and the union means that a word the workspace
+holds always finds its episode.
+
+**`resolution`.** Each result carries `resolution`, the first of these that
+applies:
+
+- `uid`, when a term equalled the episode's `content.uid`;
+- `lexical`, when the baseline matched otherwise;
+- `semantic`, when only another stage proposed the episode.
+
+An episode found both by the baseline and by a semantic stage is `lexical`.
+An implementation MAY also report which field, and which span of
+`content.text`, matched.
+
+**Order.** Results are ordered so that two implementations with no semantic
+stage return the same episodes in the same order, and a `limit` cuts them in
+the same place:
+
+1. by `resolution`: `uid`, then `lexical`, then `semantic`;
+2. within `uid` and within `lexical`, by the number of the query's distinct
+   trimmed terms, compared under case folding, that matched the episode,
+   most first, so `timeout Timeout timeout?` has one distinct term;
+3. then by `id`, in descending order by the comparison in
+   [Field order](#field-order). Ids are UUIDv7, so this is close to
+   recording order, newest first.
+
+Order within `semantic` is the implementation's own, since it depends on a
+model. A `limit` is applied last, after the filters and the ordering.
+
+**Filters run afterwards, against the files and the index.** An
+implementation applies every filter after the stages, reading the index and
+the episode files and not any cache, so that nothing a stage gets wrong can
+put a filtered-out episode in the result. It MUST support filtering by
+`occurred`, `container`, `standpoint` and `kind`, and MAY support others. Two
+rules apply whatever the filters:
+
+- A [withdrawn](#redaction) episode, an inline episode whose `content.text`
+  is redacted, is not returned.
+- A match on a field counts only while the episode's file carries that
+  field. A stale vector of a `label` since redacted does not bring the
+  episode back, though the episode is still returned if its text matched.
+  This is the rule of [*What redaction does not
+  remove*](#redaction), applied to recall.
+
+**Recall by participant reads the files.** An implementation MAY filter by
+participant, with a query or without one. The filter matches an episode
+whose `participants`, in its file, holds the reference given, compared as
+written, as a writer compares [`participants`](#episode) without normalising them:
+`mailto:Alex@example.org` does not match `mailto:alex@example.org`. Knowing
+that two references name one person is a judgement, outside the format.
+`participants` is kept out of the index so that it can be redacted, so the
+filter opens every file and is linear in history. A participants cache, below,
+is the remedy.
+
+**Derived caches.** An implementation MAY keep derived caches to serve
+recall: a semantic cache of vectors, a full-text index, and a participants
+cache. Each is optional, and each:
+
+- is stored **outside the workspace directory tree**, and is never
+  committed, published or served. A directory inside the tree that version
+  control ignores is still one forced add or one archive away from being
+  published, and a vector can disclose the text it came from. (For a hosted
+  store with no directory, what matters is the second half: it is never
+  committed, published or served with the workspace.)
+- is not read by a validator, or by a check of a source. A workspace is
+  valid, and recall correct, with no cache present.
+- records, for each entry, the id of the episode and the field it was
+  computed from. An entry computed from content the workspace does not hold
+  records `content.ref` as its field.
+- only proposes. Before an episode is returned on the strength of a cache
+  entry, the implementation reads the episode's file and confirms that it
+  carries the entry's field, and for a participants cache that
+  `participants` still holds the reference asked for. That read was already
+  needed for the filters.
+- may be missing, partial or stale, which MAY lower recall or speed and MUST
+  NOT cause an episode to be returned that the baseline and filters would
+  not allow. A redaction made on another machine arrives as a changed file,
+  with no signal to this machine's caches; deleting derived values on
+  redaction is still required, and the check against the file is what holds
+  in the meantime.
+
+**A full-text index stands in for the scan only where it agrees.** An
+implementation MAY answer the baseline from a full-text index instead of
+scanning the files, only where the index returns exactly the episodes the
+scan would, whatever it does with tokens: a query for `auth/session` still
+returns what the substring match returns. Where it cannot establish that the
+index is current, as after a merge, it scans.
+
+**The semantic cache.** It records the identifier of the model that produced
+its vectors, and a vector produced by a model other than the one in use is
+not consulted. A vector of `label` or `content.text` never needs recomputing
+under the same model, since those change only by redaction. The cache MAY
+hold more than one vector for an episode, as for a turn holding a pasted
+document longer than the model's input. Each vector of part of
+`content.text` records the span it covers and a hash of that span. Spans are
+internal to the cache: they are not a way to cite part of an episode, two
+implementations need not agree on them, and a match on a span still
+resolves to the episode.
+
+**Referenced content may be embedded, only in the cache.** Finding a mail by
+meaning needs its body, which the workspace does not hold. An implementation
+MAY fetch the content a reference episode points at and embed it, on these
+terms:
+
+- The vector is kept only in the semantic cache. The fetched content itself
+  is not kept, which is what [*Point, don't copy*](#design-principles) asks.
+- The vector records the `content.hash` it was computed against, and is
+  consulted only while the episode's file carries that `content.hash`. A
+  vector of different bytes describes something the episode does not point
+  at.
+- A reference episode with no `content.hash` has nothing to tie a vector to,
+  so its content is not embedded, and only its `label` is.
+- Fetching to embed is a check of the source, whether or not it was meant as
+  one. Where the content fetched does not match `content.hash`, the
+  implementation embeds nothing, and records what it observed in
+  [`source_status`](#source_status) as any check does.
+- A vector of an episode whose `source_status` is `changed` or `gone` is not
+  consulted, and is deleted no later than the cache's next update. The
+  recorded version can no longer be fetched, so the vector could not be
+  checked or rebuilt, and would be the only surviving copy of something. A
+  source being deleted is not a request to forget the episode; nor is it a
+  licence to keep a copy of the content.
+
+**Remote embedding is off unless configured on the machine.** An
+implementation MUST NOT send any text of an episode to an embedding service
+on another host unless the machine it runs on is configured to. That
+configuration lives outside the workspace, and nothing in the workspace can
+turn it on: a cloned workspace must not be able to cause text to leave the
+machine, and a key in `episodes.yaml` that asks for it is ignored, as unknown
+keys are. Episodes carry no scope, and none is added on this account, since
+a scope written at recording could never be widened or narrowed. So where
+remote embedding is on, it covers every episode the configuration does not
+exclude. The configuration MAY narrow it to episodes selected by
+`standpoint`, `kind` or `source.harness`, which are fixed at recording, and
+an implementation that offers such limits applies them from the episode's
+own fields.
+
+Content fetched for a reference episode is sent to another host only where
+the machine's configuration allows that by a separate setting, off by
+default. A mail body sits behind its mailbox's own access control, and
+sending it elsewhere is a larger step than sending a label.
+
+The format says what the machine's configuration must be able to say, and
+not where it is kept or what it looks like.
 
 ---
 
@@ -1434,14 +1637,17 @@ than closed.
   given that offsets into a fetched rendering break when the rendering changes.
 - **Index masking.** `standpoint`, `participants` and `occurred` together say
   who spoke to whom and when. Redacting that fact needs an index that can mask
-  entries, which DKF has also deferred.
+  entries, which DKF has also deferred. Masking would also let `participants`
+  be indexed, so that [recall by participant](#recall-by-query) need not open
+  every file.
 - **Size of a conversation episode.** This draft makes a conversation a
   container and each turn an episode. Whether turns should instead be grouped
   into segments by topic, or a whole session be one inline episode, is open,
   and shapes how precisely a claim can cite a conversation.
 - **A provenance spine.** `source`, ids, timestamps, the content hash,
   redaction and sharding are copied by agreement from DKF and restated here in
-  full, so that this format stands alone. Copies can drift apart. *Forgetting*
+  full, so that this format stands alone. [Recall by query](#recall-by-query)
+  is one more such shape, adapted from DKF's. Copies can drift apart. *Forgetting*
   asks whether that shared shape should be its own specification; a third
   format sharpens the question, and standing alone means such a specification
   would have to be one this format restates or can do without.
