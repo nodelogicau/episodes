@@ -299,6 +299,29 @@ transition from the instant of utterance, and only a zone allows that.
 - **The zone is written whenever it is known, and never guessed.** A source
   that gives only an offset, as a mail `Date` header does, is recorded with the
   offset alone: `"2026-11-07T14:24:00+11:00"`.
+  - **The zone of a `recorded` time is the zone in which the recording was
+    made.** A writer takes it from the first of these that it has: the value
+    it is given, when that carries a zone; the device at which the person
+    took part, as that device reports its zone at the time; and
+    `defaults.zone` in [`episodes.yaml`](#episodesyaml). A writer with none
+    of these writes the offset alone. Where the person lives, or says they
+    are, is not a source: it says nothing about where this turn was typed.
+  - **A zone that contradicts the offset is left out.** A writer MUST NOT
+    write a zone whose offset under the zone's rules at that instant differs
+    from the offset it writes; it writes the offset alone, whichever source
+    the zone came from. A zone with a critical flag is never dropped this
+    way: where it disagrees, the value is refused (see *No other suffixes*,
+    below). A zone with no flag that the writer has no rules for cannot be
+    checked, and is left out. The offset still fixes the
+    instant, so nothing about when is lost.
+  - **A value in `Z` has no local offset,** so there is nothing to check
+    `defaults.zone` against, and a writer MUST NOT apply it to such a value.
+    A zone from the device is different, since the device reports where it
+    is: a writer SHOULD write the local time, with the offset that zone gives
+    at that instant, and the zone.
+  - **`defaults.zone` is never applied to a `stated` or `inferred` time,** or
+    to a date alone. Those take their zone from the source or the evidence,
+    or go without.
 - **No other suffixes.** Writers MUST NOT write RFC 9557's critical flag (`!`)
   or any suffix but the zone. Readers MUST ignore an elective suffix they do
   not implement, such as `[u-ca=gregory]`, and MUST treat as invalid an episode
@@ -351,10 +374,23 @@ its offset fixes. A date alone is compared as a date with the recording
 instant's date, reckoned in `tz` where `tz` is present, and otherwise in UTC
 allowing one day, since the date's own zone is unknown.
 
-A validator warns, naming the episode, when either bound is violated. It
-warns rather than fails because it cannot tell a writer's mistake from clocks
-that disagree by minutes, the writer's or a source's, in the same way it warns
-on an id from later than now (see [Sharding](#sharding)).
+**A stated time may be up to five minutes ahead.** Where `basis` is `stated`,
+a date-time in `start` or `end` may be up to five minutes later than
+`timestamp`. A writer MAY record such an episode, and records the time as the
+source stated it, not moved back to `timestamp`. A source's clock and the
+writer's can disagree, as when a mail server's clock runs thirty seconds
+ahead, and the writer cannot correct a time a source stated: a time it moved
+would be one no source gave, under a basis that says a source gave it. The
+allowance does not apply to a `recorded` or `inferred` time, which comes from
+the writer's own clock or reasoning, the same clock that supplies `timestamp`.
+It does not add to the allowance for a date alone.
+
+A validator warns, naming the episode, when either bound is violated by more
+than the allowance that applies: none for a `recorded` or `inferred`
+date-time, five minutes for a `stated` one, and one day for a date alone with
+no `tz`. It warns rather than fails because it cannot tell a writer's mistake
+from clocks that disagree, the writer's or a source's, in the same way it
+warns on an id from later than now (see [Sharding](#sharding)).
 
 #### `standpoint`
 
@@ -887,6 +923,16 @@ reference episode) is valid when absent **only** because `fields` lists it.
 That is how a validator tells a redacted episode from a malformed one: an
 inline episode with no `text` and no `redacted` block listing it is rejected.
 
+**`fields` lists only what was removed.** A path in `fields` records that the
+episode carried the field and that it was removed. A writer asked to redact a
+path the episode does not carry MUST refuse the whole request, naming the
+path, unless the block already lists it, in which case the request changes
+nothing for that path. A request for a field that is not there is most likely
+a mistake about which episode or which field, and a path listed for a field
+that never existed would say something false in a block that is never
+removed. Once a field is gone, a file that had it and a file that never did
+look the same, so no validator can check this; it is a rule for writers.
+
 **What can be redacted is a closed set:** `label`, `participants`, `place`,
 `links`, `content.text`, `content.ref`, `content.uid`, `content.version`,
 `content.hash`, `content.language`.
@@ -925,7 +971,16 @@ behind: redacting again adds them to the block.
 
 **Redacting `content.text` withdraws an inline episode.** It carries no record,
 so it is out of recall, and anything that quotes it can no longer be checked
-against it.
+against it. Out of recall means that a reader MUST NOT return the episode as
+content in answer to recall: a search for what was said does not find it. A
+reader MAY show that the episode exists and where it stands in its container,
+as a placeholder at its position in a thread, using only the fields that
+cannot be redacted (`id`, `kind`, `occurred`, `container`, `ordinal`,
+`standpoint` and `timestamp`). These are in the index already, so showing them
+discloses nothing new, and leaving the position out would make the next turn
+read as a reply to the wrong one. A reader MUST NOT show anything that was
+redacted, from any copy it holds, and leaves out a `label` that was kept,
+since a later redaction could remove it.
 
 **Redacting `content.ref` leaves a reference episode as a tombstone.** It says
 that something of this kind happened at this time from this standpoint, and
@@ -1162,7 +1217,12 @@ number of files in its month's directory. A rebuild or validation compares a
 directory listing against the count and parses nothing unless they differ. A
 difference means a branch open across two or more month boundaries has added
 files to a sealed month: validation fails naming the files, and the remedy is
-to re-mint the branch's episodes before merging.
+to re-mint the branch's episodes before merging. A rebuild of the index MUST
+NOT rewrite a segment that exists. It fails as validation does, naming each
+file with no entry in the segment and each entry with no file, since `count`
+can be wrong either way, and leaves the segment as it was. A rebuild that
+absorbed the late files would make re-minting optional, and every cached copy
+of the segment wrong with nothing reported.
 
 **A future id is a broken clock.** A validator warns, naming the episode, on any
 id minted or `timestamp` dated later than now, and fails on an id minted two or
@@ -1179,18 +1239,27 @@ defaults:                                     # optional; writers only
   source:
     author: https://github.com/benfortuna
     harness: claude
+  zone: Australia/Melbourne
 ```
 
 `format` and `workspace.id` are required. A reader MUST refuse a workspace
 whose `format` it does not implement, naming the version, rather than read
 what it can. Unknown keys are ignored.
 
+`defaults.zone` is optional and holds one IANA time zone name. Like every
+default it is read by writers only: it is the last source a writer consults
+for the zone of a `recorded` time, and is written only where it agrees with
+the offset (see [`occurred`](#occurred)).
+
 ### `index.yaml`
 
 The index is a cache of the files, never the reverse. The episode files are
-the source of truth; the index MUST be fully reconstructible from them, and a
+the source of truth; in a workspace with no late merge (see
+[Sharding](#sharding)) the index MUST be fully reconstructible from them, and a
 consumer MUST NOT return wrong results because the index is missing or stale
-(it may be slower). Two branches that each add an episode both touch
+(it may be slower). A rebuild writes the root and any segment that is missing
+altogether, and rewrites no segment that exists; a late merge is repaired by
+re-minting, not by rebuilding. Two branches that each add an episode both touch
 `index.yaml`, and the conflict is resolved by regenerating it, never by hand.
 The index stays committed because an HTTP consumer cannot list a directory, and
 for it the index is how episodes are enumerated; it should treat the index as
@@ -1226,6 +1295,10 @@ entries:
 When a month seals, its entries leave the root for a new segment, and the root
 gains that segment's `path` and `count`. A segment's `count` equals the number
 of files in its month's directory, and a segment never changes once written.
+A sealed month with no files has no segment and no entry in `segments`, and a
+validator does not report one as missing. A segment with nothing in it would
+carry nothing, and would make the index depend on how many months passed
+between two episodes, so that two indexes of the same files could differ.
 
 Each entry mirrors exactly `id`, `kind`, `occurred`, `container`, `ordinal`,
 `standpoint` and `timestamp`, which is what recall by time, by conversation and
