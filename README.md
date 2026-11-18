@@ -708,8 +708,8 @@ an `ordinal` repeats.
 
 #### Links
 
-`links` says how an episode relates to other episodes, or to resources outside
-the workspace, using [Web Linking](https://www.rfc-editor.org/rfc/rfc8288)
+`links` says how an episode, or the content it points at, relates to other
+episodes or to resources outside the workspace, using [Web Linking](https://www.rfc-editor.org/rfc/rfc8288)
 (RFC 8288):
 
 ```yaml
@@ -720,14 +720,27 @@ links:
     href: epi_01a1b6a2-7e31-7c08-a4d9-5b2e8f0c3d17   # the voice memo it was made from
 ```
 
-Each link has exactly `rel` and `href`. `rel` is a relation type registered in
+Each link has `rel` and `href`, may have `anchor`, and has no other key. `rel`
+is a relation type registered in
 the [IANA Link Relations registry](https://www.iana.org/assignments/link-relations/),
 written in lowercase and used in its registered meaning, or an absolute URI,
 which is how RFC 8288 lets anyone define a relation without a registry.
 `href` is an episode id, resolved within the workspace, or a URI. Writers sort
 `links` by `rel` and then by `href`, each by the comparison in
-[Field order](#field-order). A reader MUST NOT reject an episode for a `rel`
-it does not know, and gives it no meaning.
+[Field order](#field-order), and write a link with no `anchor` before one with
+the same `rel` and `href` that has one. A reader MUST NOT reject an episode
+for a `rel` it does not know, and gives it no meaning.
+
+**`anchor` says a link is about the referenced content.** In RFC 8288 a link
+runs from a context to a target, and `anchor` names the context. A link with
+no `anchor` is about the episode. A link with `anchor` is about the content
+the episode refers to, and its value MUST equal the episode's `content.ref`,
+character for character; a validator rejects any other value, naming the
+link. So `anchor` appears only on an episode that carries `content.ref`, and
+a validator rejects it on any other. No other use of `anchor` is admitted: an
+episode makes no statements about resources other than itself and what it
+points at. `anchor` repeats `ref`, and is removed with it, since
+[redacting `content.ref`](#redaction) also redacts `links`.
 
 Whether a relation is registered depends on which copy of the registry is
 consulted, so validity does not turn on it:
@@ -753,12 +766,58 @@ Two registered relations have a meaning between episodes:
   better transcript supersedes an earlier one. The earlier episode is not
   changed and stays citable.
 
+A third has a meaning for the content a reference episode points at:
+
+- **`memento`** ([RFC 7089](https://www.rfc-editor.org/rfc/rfc7089)): with
+  `anchor`, the target is an archived snapshot of the content as it was when
+  the episode was recorded. Its `href` is a URI, never an episode id. A
+  `memento` link with no `anchor` is invalid, since an episode has no
+  snapshot, and a validator rejects it, naming the link. An episode may carry
+  more than one, as when two archives each hold a snapshot.
+
+Together with `content.ref` and the episode's time, a `memento` link records
+what the [Robust Links](https://robustlinks.mementoweb.org/) convention does
+on the web: the original URL, when the link was made, and where a snapshot
+of it is kept.
+
+```yaml
+# a web page, with a snapshot made when it was recorded
+kind: document
+links:
+  - rel: memento
+    href: https://web.archive.org/web/20261107031500/https://example.com/report
+    anchor: https://example.com/report
+content:
+  mode: ref
+  ref: https://example.com/report
+  hash: sha256:…
+  media_type: text/html
+```
+
+Any relation may be anchored, so `canonical` or `alternate` can be said of
+the referenced page. The format gives a meaning to `memento` alone, and a
+reader gives other anchored relations none, as for any relation it does not
+know.
+
 **Links are written once.** A writer writes `links` when it records the episode
 and never adds, removes or changes one afterwards, except by redaction. A link
 to an episode names one recorded before it, so nothing ever needs adding later:
 the newer episode carries the relation. A link whose episode id does not
 resolve, because the target was redacted, dropped or never copied, is reported
 as unresolved and does not make the episode invalid.
+
+A snapshot is therefore linked only when the episode is recorded, and a
+snapshot made later is never added: it may be of a later page. The writer
+links a snapshot it caused to be made while recording, or an existing one it
+has compared with the content it fetched and found to be the same content.
+An older snapshot of a page that has since changed is not linked.
+
+**Archiving is explicit.** Submitting content to an archive discloses it to
+the archive, and for a public archive publishes it. A writer MUST NOT cause
+content to be archived unless the person on whose behalf it records has
+explicitly asked for that content to be archived, and recording an episode is
+not such a request. Linking a snapshot that already exists submits nothing.
+No validator can check this, so it is a rule for writers.
 
 **Links do not restate containment.** `container` and `ordinal` are the
 format's containment, mirrored in the index, and a writer MUST NOT also write
@@ -893,6 +952,21 @@ content is whatever quote each citing claim carries, which is why a claim
 citing a `gone` episode is still verifiable against its own quote, and why its
 reader should be told *source no longer available, quote retained* rather
 than *retracted*.
+
+**A snapshot is a fallback, not a copy.** A reader that cannot fetch the
+content as recorded, because the source is `changed`, `unreachable` or
+`gone`, MAY fetch the `href` of a [`memento` link](#links) in its place, and
+presents what it fetched as an archive's copy, not as the source.
+`source_status` is unchanged by that, because it describes the source: a
+`gone` page with a snapshot is still `gone`. The rule against back-filling
+holds here too, and a writer MUST NOT copy a snapshot's content into the
+episode. The workspace keeps a second pointer, and no content.
+
+**A snapshot is not proof.** An archive may serve a page with changes of its
+own, such as rewritten links or a banner, so a snapshot need not match
+`content.hash`. A reader MAY compare them. It reports a snapshot that does not
+match as unverified, and does not treat the episode as invalid or the source
+as `changed` on that account, since the snapshot is not the source.
 
 A source being deleted is not a request to forget. People delete mail to tidy
 an inbox. Forgetting is redaction, below, and is always explicit.
@@ -1419,6 +1493,9 @@ the [IANA time zone database](https://www.iana.org/time-zones) for its zones ·
 [IANA Link Relations registry](https://www.iana.org/assignments/link-relations/)
 for `links`, with `via` from [RFC 4287](https://www.rfc-editor.org/rfc/rfc4287)
 and `predecessor-version` from [RFC 5829](https://www.rfc-editor.org/rfc/rfc5829) ·
+[RFC 7089](https://www.rfc-editor.org/rfc/rfc7089) Memento for the `memento`
+relation, and the [Robust Links](https://robustlinks.mementoweb.org/)
+convention for recording a snapshot beside the original URL ·
 [YAML 1.2](https://yaml.org/spec/1.2.2/) as the file format ·
 [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) SHA-256 for
 `content.hash` ·
