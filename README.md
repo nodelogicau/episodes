@@ -126,8 +126,10 @@ as described in [BCP 14](https://www.rfc-editor.org/info/bcp14)
 appear in all capitals.
 
 [Core Object Types](#core-object-types) and [File Layout](#file-layout) are
-normative, except where a passage is marked informative. Every other section
-is informative.
+normative, except where a passage is marked informative.
+[Reference Tool Set](#reference-tool-set) is normative for an implementation
+that exposes a tool under a name it lists, and only for that implementation.
+Every other section is informative.
 
 This specification is complete on its own. A writer, reader or validator
 conforms by implementing the normative sections alone, with no DKF or
@@ -879,6 +881,9 @@ a control whose only purpose is to log the act, the act has no `via` link.
 The rule does not depend on `source.harness`: a "log my run" button is a
 dedicated control whether a harness or a connector implements it. No
 validator can check this in general, so it is a rule for writers.
+(Informative: a control records through the implementation directly, never
+through a model's tool call, which is why the reference tool set's
+[`act_attest`](#reference-tool-set) requires `via`.)
 
 **It is self-attestation only.** A self-attested act's `standpoint` MUST equal
 its `source.author`. When it links `via` an episode that resolves in the
@@ -1211,7 +1216,8 @@ are expected, and all are implementation choices within the rules above:
 
 - **Inline content is recorded as it happens.** A conversation has no other
   home, so a harness that wants to cite it later records every turn when it is
-  spoken.
+  spoken, from its own transcript (see
+  [Reference Tool Set](#reference-tool-set)).
 - **Referenced content is recorded on demand.** Most mail is not worth a
   record. An implementation can record a reference episode at the moment
   something durable first cites the thing it points at, such as a claim, an
@@ -1589,6 +1595,126 @@ not where it is kept or what it looks like.
 
 ---
 
+## Reference Tool Set
+
+A harness reaches an implementation through tools, and a skill written
+against one implementation should work against another. This section names a
+reference set: one tool per operation, grouped by what it acts on and named
+after the verb. The names are a reference, not a requirement. An
+implementation MAY expose its operations under other names, or expose no
+tools at all and still conform. One that exposes a name listed here SHALL
+keep that tool's semantics and accept its parameters as stated, so that
+skills and prompts transfer. The set is drawn from the verbs of
+[episodes-cli](https://github.com/nodelogicau/episodes-cli) v0.2.0. No
+implementation exposes it yet. (Informative: in the family, a set like this
+is what an MCP server exposes, as DKF's
+[MCP Server Tools](https://github.com/nodelogicau/particulars#mcp-server-tools)
+and intentions'
+[Reference Tool Set](https://github.com/nodelogicau/intentions#reference-tool-set)
+are.)
+
+Parameters are named in snake case after the reference implementation's
+flags, and a parameter marked `?` is optional. A repeatable value is a list:
+`participants`, `links` as `{rel, href}` pairs, `mementos` and `fields`.
+Text is passed as a value. `hash_file` and `content_file` are paths the
+implementation reads, because the bytes they cover, such as a complete
+`message/rfc822` message, must be exact, and a value carried through a
+caller's output is not a reliable carrier of exact bytes. An implementation
+that cannot read the caller's files does not offer them. Identifiers are the
+episode ids defined above. A tool's result is the same as the
+implementation's non-interactive output for the operation, and every refusal
+the operation makes, the tool makes.
+
+Three groups of parameters recur in the tables:
+
+- **the episode's fields:** `kind`, `standpoint`, `participants?`, `place?`,
+  `label?`, `links?`, `language?`;
+- **its placement:** `container?`, `ordinal?`;
+- **its time:** `occurred`, `end?`, `tz?`, `basis`.
+
+Every tool that writes also accepts `model?`, the model behind the harness.
+
+**Record.**
+
+| Tool | Parameters | Does |
+|---|---|---|
+| `episode_record_inline` | the episode's fields, its placement, `text`, `media_type?`, `derivation?`, `zone?`, its time (optional) | Record content that has no other home. Without `occurred`, the time is now and `basis` is `recorded`. |
+| `episode_record_ref` | the episode's fields, its placement, `ref`, `uid?`, `message_id?`, `media_type?`, `version?`, `hash?`, `hash_file?`, `mementos?`, `allow_duplicate?`, its time | Record a trace of content that lives elsewhere; `occurred` and `basis` are required. |
+| `conversation_start` | the first turn's fields, `text`, `media_type?`, `derivation?`, `zone?`, its time (optional), `container_kind?`, `container_standpoint?` | Write a conversation container and its first turn as one act. |
+| `conversation_turn` | `container`, the turn's fields, `ordinal?`, `text`, `media_type?`, `derivation?`, `zone?`, its time (optional) | Append a turn, given the next ordinal. |
+| `act_attest` | `via`, `occurred`, `end?`, `tz?`, `basis`, `kind?`, `participants?`, `place?`, `label?`, `links?`, `language?` | Record a [self-attested act](#self-attested-acts) of the bound author. |
+| `episode_observe` | `id`, `state?`, `content_file?`, `version?`: `state` alone, `content_file` with or without `version`, or `version` alone | Write [`source_status`](#source_status) on a reference episode. |
+| `episode_redact` | `id`, `fields`, `reason` | Remove fields from the closed set and record the [redaction](#redaction). |
+
+**Recall.**
+
+| Tool | Parameters | Does |
+|---|---|---|
+| `episode_show` | `id`, `children?` | One episode, located by the path its id derives. |
+| `episode_list` | `since?`, `until?`, `tz?`, `standpoint?`, `kind?`, `container?`, `include_withdrawn?`, `by?`, `limit?` | Episodes filtered by when they occurred, whose they are, their kind and their container. |
+| `episode_query` | `text`, `since?`, `until?`, `tz?`, `standpoint?`, `kind?`, `container?`, `participant?`, `limit?` | Episodes found by [recall by query](#recall-by-query). |
+| `episode_thread` | `container` | A container's children in order, a withdrawn one keeping its place. |
+
+**Workspace.**
+
+| Tool | Parameters | Does |
+|---|---|---|
+| `validate` | — | Check every file, the index and every segment. |
+| `workspace_status` | — | Where the implementation is bound and how the workspace is configured. |
+
+The format's rules for writers meet a tool call in these places, and an
+implementation that exposes the names SHALL keep them:
+
+- **The author, the harness and the clock are bound.** No listed tool
+  accepts `source.author`, `source.harness`, or a value standing for the
+  current time. The author and the harness come from the implementation's
+  configuration when it starts. `source.timestamp`, the instant an id is
+  minted, and any time defaulted to now come from the implementation's own
+  clock. A call that passes an author is refused, or the bound author is
+  written and the result says so. A self-attested act's `standpoint` is its
+  `source.author`, so an author chosen per call would let a caller attest an
+  act on anyone's behalf.
+- **`act_attest` requires `via`.** `via`, `occurred` and `basis` are
+  required, and the tool has no parameter that records an act as logged from
+  a dedicated control. `via` names an episode that is in the workspace when
+  the call is made and whose `standpoint` is the bound author; any other is
+  refused. The act's `standpoint` is the bound author and its `content` is
+  `{mode: attested}`. (Informative: a tool call comes from a model, and a
+  model saying that an act came from a control is the inference the
+  self-attestation rules forbid. A dedicated control records through the
+  implementation directly.)
+- **A conversation is captured from the harness's transcript.** A harness
+  SHOULD record a conversation's turns from its own transcript, through a hook
+  or a connector, and not by having a model call `conversation_turn` with text
+  the model writes. Recording is parsing; a turn re-typed by a model can be
+  paraphrased, trimmed or missing, and nothing in the file shows it. An
+  implementation MAY leave `conversation_start` and `conversation_turn` out
+  of the tools it lists to a model. No validator can check this, so it is a
+  rule for writers.
+- **`episode_record_ref` refuses a duplicate.** A call whose `(standpoint,
+  media_type, uid)` matches an existing reference episode is refused, naming
+  that episode, unless `allow_duplicate` is true.
+- **`episode_redact` says what it did.** It applies the rules of
+  [Redaction](#redaction): the closed set of paths, one merged block, no
+  cascade. Its result lists every field it removed, including those removed
+  with `content.ref`, and says that the redaction cannot be undone and that
+  version history may still hold the text.
+- **The recall tools write nothing.** Nor do `validate` and
+  `workspace_status`. `episode_query` follows
+  [Recall by query](#recall-by-query), and every result carries
+  `resolution`. `episode_list` returns a withdrawn episode only when
+  `include_withdrawn` is true, and `episode_query` never does.
+
+(Informative: a server that serves episodes as MCP resources can use the
+templates `episode://{id}` and `episode://{id}/thread`. The scheme is local to
+the server and is never written into an episode, whose links use ids. An
+episode is never revised, but its file changes when a source is observed and
+when it is redacted, so a server that takes subscriptions notifies its
+subscribers after either, and a client keeps no copy of text a redaction
+removed. MCP's `destructiveHint` fits `episode_redact`.)
+
+---
+
 ## Design Principles
 
 **Record, never interpret.** An episode says what happened, from whose
@@ -1624,7 +1750,10 @@ proposal; the open questions below are listed rather than closed.
 is a reference implementation of this draft. Where the draft left a behaviour
 undecided, it decided and recorded the decision in
 [`SPEC-FEEDBACK.md`](https://github.com/nodelogicau/episodes-cli/blob/main/SPEC-FEEDBACK.md);
-the points still open there are tracked as issues on this repository.
+the points still open there are tracked as issues on this repository. It does
+not yet expose the [reference tool set](#reference-tool-set);
+[episodes-cli#32](https://github.com/nodelogicau/episodes-cli/issues/32)
+tracks a server that does.
 
 - **Derived renderings of referenced media.** A voice memo in storage is
   referenced, but its transcript is the harness's own work and has no other
