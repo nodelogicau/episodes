@@ -43,8 +43,8 @@
 
 ## 6. Deploy and close out
 
-- [ ] 6.1 Commit `docs/` and the README pointer on main; push
-- [ ] 6.2 Pages settings: deploy from `main`, folder `/docs`; confirm the `github.io` address serves the page
-- [ ] 6.3 DNS: four apex `A` records (DNS-only if on Cloudflare), optional `www` CNAME; wait for the certificate; enforce HTTPS
-- [ ] 6.4 Before announcing, episodes-cli#22 has landed and 5.6–5.8 have been re-run
-- [ ] 6.5 Archive the change with sync so `landing-site` lands in the main specs
+- [x] 6.1 Commit `docs/` and the README pointer on main; push
+- [x] 6.2 Pages settings: deploy from `main`, folder `/docs`; confirm the `github.io` address serves the page
+- [x] 6.3 DNS: four apex `A` records (DNS-only if on Cloudflare), optional `www` CNAME; wait for the certificate; enforce HTTPS
+- [x] 6.4 Before announcing, episodes-cli#22 has landed and 5.6–5.8 have been re-run
+- [x] 6.5 Archive the change with sync so `landing-site` lands in the main specs
