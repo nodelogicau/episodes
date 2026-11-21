@@ -62,15 +62,15 @@ The family diagram SHALL show particulars, intentions and episodes, each sibling
 - **THEN** the browser lands on particulars.fyi or intentions.fyi respectively
 
 ### Requirement: The page says nothing the specification does not
-Every claim the page makes about the format SHALL be true of the README on `main` at the time of publication. Outside the "Start in your terminal" section the page SHALL NOT name a field, a vocabulary value, or a CLI verb, so that a rename in the specification cannot falsify it.
+Every claim the page makes about the format SHALL be true of the README on `main` at the time of publication. Outside the "Start in your terminal" section and the generated proof figure, which is the binary's own output, the page SHALL NOT name a field, a vocabulary value, or a CLI verb, so that a rename in the specification cannot falsify its prose.
 
 #### Scenario: The page is checked against the README
-- **WHEN** each sentence of the page's prose is read against the README's Problem, Purpose, Approach, Relation to other formats and Status sections
+- **WHEN** each sentence of the page's prose is read against the README's Problem, Purpose, Approach, Relation to other formats, Design Principles and Status sections
 - **THEN** no sentence asserts something those sections do not
 
 #### Scenario: A field is renamed in the specification
 - **WHEN** any field or vocabulary value changes name in a later change
-- **THEN** no edit outside the terminal section is required for the page to remain true
+- **THEN** no edit outside the terminal section and the generated figure is required for the page to remain true
 
 ### Requirement: The proof figure is drawn from real output and can be regenerated
 The proof section SHALL contain a figure rendered from the actual `--json` output of a released episodes-cli binary run against an invented example workspace committed under `docs/example/`, written by that binary with the clock fixed and not hand-edited. A script under `docs/` SHALL regenerate the figure's SVG in place between marker comments, and `docs/README.md` SHALL record both the commands that built the workspace and the command that regenerates the figure. The figure's caption SHALL name the CLI version it was drawn from. The figure SHALL NOT show episode ids.

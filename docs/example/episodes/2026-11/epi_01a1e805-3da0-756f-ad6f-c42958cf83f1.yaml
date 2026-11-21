@@ -1,0 +1,20 @@
+id: epi_01a1e805-3da0-756f-ad6f-c42958cf83f1
+type: episode
+kind: message
+occurred:
+  start: "2026-11-17T16:40:20+11:00[Australia/Melbourne]"
+  basis: recorded
+standpoint: https://example.com/assistant
+participants:
+  - https://example.com/people/ada
+container: epi_01a1e804-ef80-72fc-862f-f242eca33736
+ordinal: 2
+content:
+  mode: inline
+  media_type: text/markdown
+  derivation: verbatim
+  text: 'Logged: renewed the status page certificate, Tuesday 14:00 to 14:30.'
+source:
+  author: https://example.com/people/ada
+  harness: example-harness
+timestamp: 2026-11-17T05:40:20Z

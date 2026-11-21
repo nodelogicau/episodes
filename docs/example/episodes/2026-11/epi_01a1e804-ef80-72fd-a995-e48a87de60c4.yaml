@@ -1,0 +1,20 @@
+id: epi_01a1e804-ef80-72fd-a995-e48a87de60c4
+type: episode
+kind: message
+occurred:
+  start: "2026-11-17T16:40:00+11:00[Australia/Melbourne]"
+  basis: recorded
+standpoint: https://example.com/people/ada
+participants:
+  - https://example.com/assistant
+container: epi_01a1e804-ef80-72fc-862f-f242eca33736
+ordinal: 1
+content:
+  mode: inline
+  media_type: text/markdown
+  derivation: verbatim
+  text: I renewed the status page certificate this afternoon, from two until half past. Can you log it?
+source:
+  author: https://example.com/people/ada
+  harness: example-harness
+timestamp: 2026-11-17T05:40:00Z

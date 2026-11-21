@@ -1,0 +1,32 @@
+format: episodes/0.1
+segments: []
+entries:
+  - id: epi_01a1e147-2aa0-7228-85c2-bdc427c3f82c
+    kind: email
+    occurred: {start: "2026-11-16T09:12:00+11:00[Australia/Melbourne]", basis: stated}
+    standpoint: https://example.com/people/jane
+    timestamp: 2026-11-15T22:15:00Z
+  - id: epi_01a1e804-ef80-72fc-862f-f242eca33736
+    kind: conversation
+    occurred: {start: "2026-11-17T16:40:00+11:00[Australia/Melbourne]", basis: recorded}
+    standpoint: https://example.com/people/ada
+    timestamp: 2026-11-17T05:40:00Z
+  - id: epi_01a1e804-ef80-72fd-a995-e48a87de60c4
+    kind: message
+    occurred: {start: "2026-11-17T16:40:00+11:00[Australia/Melbourne]", basis: recorded}
+    container: epi_01a1e804-ef80-72fc-862f-f242eca33736
+    ordinal: 1
+    standpoint: https://example.com/people/ada
+    timestamp: 2026-11-17T05:40:00Z
+  - id: epi_01a1e805-3da0-756f-ad6f-c42958cf83f1
+    kind: message
+    occurred: {start: "2026-11-17T16:40:20+11:00[Australia/Melbourne]", basis: recorded}
+    container: epi_01a1e804-ef80-72fc-862f-f242eca33736
+    ordinal: 2
+    standpoint: https://example.com/assistant
+    timestamp: 2026-11-17T05:40:20Z
+  - id: epi_01a1e805-64b0-7049-a971-4abc924bfd88
+    kind: activity
+    occurred: {start: "2026-11-17T14:00:00+11:00[Australia/Melbourne]", end: "2026-11-17T14:30:00+11:00[Australia/Melbourne]", basis: stated}
+    standpoint: https://example.com/people/ada
+    timestamp: 2026-11-17T05:40:30Z

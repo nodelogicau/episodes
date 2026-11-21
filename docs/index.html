@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Episodes</title>
+<meta name="description" content="Episodes — an open format for episodic memory: what happened, when and where, from whose standpoint, and where the record of it lives.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='4' width='24' height='24' rx='6' fill='none' stroke='%239a5a0f' stroke-width='4'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%239a5a0f'/%3E%3C/svg%3E">
+<!--
+  The figure in the proof section is a static rendering of the installed
+  episodes binary's own output on the example workspace in docs/example:
+    episodes list - -json, episodes thread <container> - -json, and
+    episodes show <id> - -json for each episode
+  (remove the spaces in the flags; written this way so this comment can't be
+  mistaken for the command), rendered by docs/timeline-figure.py between the
+  TIMELINE-FIGURE markers. Ids are omitted; every element carries a native
+  SVG <title> tooltip with the output it was drawn from. To regenerate:
+    python3 docs/timeline-figure.py
+  Outside the terminal section and that figure, the page names no field,
+  vocabulary value or CLI verb, so a rename in the specification cannot make
+  its prose false. Everything it says is said in the README's Problem,
+  Purpose, Approach, Relation to other formats, Design Principles and Status
+  sections.
+-->
+<style>
+  :root {
+    --bg: #faf9f7;
+    --fg: #1f2430;
+    --muted: #5b6270;
+    --line: #d8d5cf;
+    --card: #ffffff;
+    --accent: #9a5a0f;
+    --accent-soft: #f7ebda;
+    --stale: #b3341f;
+    --code-bg: #171c26;
+    --code-fg: #e6e9ef;
+    --prompt: #f0c27a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c;
+      --fg: #e8e6e1;
+      --muted: #a0a7b3;
+      --line: #2c313d;
+      --card: #1a1e27;
+      --accent: #e9b56c;
+      --accent-soft: #302412;
+      --stale: #e0604a;
+      --code-bg: #0c0e13;
+      --code-fg: #dfe3ea;
+      --prompt: #e9b56c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    -webkit-text-size-adjust: 100%;
+  }
+  main, footer { display: block; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 0 1.25rem; }
+  section { padding: 3.5rem 0; }
+  section + section { border-top: 1px solid var(--line); }
+
+  h1, h2 { line-height: 1.15; letter-spacing: -0.015em; }
+  h1 { font-size: clamp(2.1rem, 6vw, 3.4rem); margin: 0.5rem 0 1rem; }
+  h2 { font-size: clamp(1.5rem, 4vw, 2.1rem); margin: 0 0 0.75rem; }
+  p.lead { font-size: 1.125rem; color: var(--muted); max-width: 44rem; }
+  a { color: var(--accent); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  .eyebrow {
+    font-size: 0.8rem; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0;
+  }
+  .hero { text-align: center; padding-top: 4.5rem; }
+  .hero p.lead { margin: 0 auto 1.75rem; }
+  .cta { display: inline-block; margin: 0.25rem 0.4rem; padding: 0.65rem 1.3rem;
+    border-radius: 999px; text-decoration: none; font-weight: 600; }
+  .cta.primary { background: var(--accent); color: var(--bg); }
+  .cta.ghost { color: var(--accent); border: 1.5px solid var(--accent); }
+  p.credit { font-size: 0.875rem; color: var(--muted); text-align: center;
+    max-width: 40rem; margin: 1.25rem auto 0; }
+
+  figure { margin: 2.25rem 0 0; }
+  .diagram-wrap { overflow-x: auto; }
+  .diagram-wrap svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  svg.min640 { min-width: 640px; }
+  svg.min720 { min-width: 720px; }
+  figcaption { font-size: 0.9rem; color: var(--muted); text-align: center; margin-top: 0.75rem; }
+
+  /* diagram vocabulary, shared with particulars.fyi and intentions.fyi */
+  svg text { fill: var(--fg); font-family: inherit; font-size: 15px; }
+  svg .small { font-size: 12.5px; }
+  svg .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  svg .lbl { fill: var(--muted); font-size: 13px; }
+  svg .accent-t { fill: var(--accent); font-weight: 600; }
+  svg .stale-t { fill: var(--stale); font-weight: 600; }
+  svg .box { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+  svg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; }
+  svg .box-stale { fill: var(--card); stroke: var(--stale); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  svg .edge { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+  svg .edge-dash { stroke-dasharray: 5 5; }
+  svg .head { fill: var(--muted); }
+  svg .divider { stroke: var(--line); stroke-dasharray: 3 6; stroke-width: 1.5; }
+  svg a text { fill: var(--accent); text-decoration: underline; }
+  /* this page's additions: a trace, and a container around its children */
+  svg .trace { fill: var(--card); stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  svg .container { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 4; }
+  svg .grid { stroke: var(--line); stroke-width: 1; }
+
+  .kicker {
+    font-size: clamp(1.15rem, 3vw, 1.5rem); font-weight: 650; text-align: center;
+    max-width: 38rem; margin: 2.5rem auto 0; line-height: 1.5;
+  }
+  .kicker span { color: var(--accent); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem; margin-top: 2.25rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 1.1rem 1.2rem; }
+  .card h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+  .card p { margin: 0; font-size: 0.925rem; color: var(--muted); }
+
+  pre.term {
+    background: var(--code-bg); color: var(--code-fg); border-radius: 12px;
+    padding: 1.25rem 1.4rem; overflow-x: auto; font-size: 0.9rem; line-height: 1.7;
+    margin: 1.75rem 0;
+  }
+  pre.term .p { color: var(--prompt); user-select: none; }
+
+  .links { margin: 1.5rem 0 0; padding: 0; list-style: none;
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.75rem; font-weight: 600; }
+  .roadmap {
+    margin-top: 2.5rem; padding: 0.85rem 1.2rem; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--card); font-size: 0.925rem; color: var(--muted);
+  }
+  .roadmap strong { color: var(--fg); }
+
+  footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem;
+    font-size: 0.875rem; color: var(--muted); }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+
+  <!-- 1 · HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Episodes &middot; an open format for episodic memory</p>
+      <h1>You don&rsquo;t reconcile the past.</h1>
+      <p class="lead">An open format for what happened: when and where, from whose
+        point of view, and where the record of it lives. Beliefs about an event change;
+        the event doesn&rsquo;t. Written by harnesses and connectors, reviewed by people
+        through git. An early draft, with a reference implementation.</p>
+      <p>
+        <a class="cta primary" href="#start">Get started</a>
+        <a class="cta ghost" href="https://github.com/nodelogicau/episodes">Read the spec</a>
+      </p>
+
+      <figure>
+        <div class="diagram-wrap">
+        <svg class="min720" viewBox="0 0 780 290" role="img" aria-labelledby="hero-title hero-desc">
+          <title id="hero-title">One happening, many readings</title>
+          <desc id="hero-desc">On the left, one episode: on Tuesday afternoon Ada renewed
+            the status page certificate. It is recorded once and never revised. On the
+            right, three readings of it, each citing the same record: one from that week,
+            that it was renewed in good time, later revised; one from a year later, that
+            it was renewed with three days to spare; and Jane's, that the warning came
+            too late. The readings change and differ; the record stays as it was.</desc>
+          <defs>
+            <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="head"/>
+            </marker>
+          </defs>
+          <text x="170" y="30" text-anchor="middle" class="lbl" font-weight="600">what happened</text>
+          <text x="615" y="30" text-anchor="middle" class="lbl" font-weight="600">what was made of it</text>
+
+          <!-- the episode -->
+          <rect x="40" y="96" width="260" height="104" rx="12" class="box-accent"/>
+          <text x="60" y="124" font-weight="600">Tue 17 Nov, 14:00&ndash;14:30</text>
+          <text x="60" y="148" class="small">Ada renewed the status page</text>
+          <text x="60" y="166" class="small">certificate</text>
+          <text x="60" y="188" class="accent-t small">recorded once &middot; never revised</text>
+
+          <!-- the readings -->
+          <rect x="470" y="46" width="290" height="60" rx="10" class="box-stale"/>
+          <text x="488" y="70" class="lbl small">a reading, that week</text>
+          <text x="488" y="92" class="small">&ldquo;renewed in good time&rdquo; &middot; <tspan class="stale-t">revised</tspan></text>
+
+          <rect x="470" y="118" width="290" height="60" rx="10" class="box"/>
+          <text x="488" y="142" class="lbl small">a reading, a year later</text>
+          <text x="488" y="164" class="small">&ldquo;renewed with three days to spare&rdquo;</text>
+
+          <rect x="470" y="190" width="290" height="60" rx="10" class="box"/>
+          <text x="488" y="214" class="lbl small">Jane&rsquo;s reading</text>
+          <text x="488" y="236" class="small">&ldquo;the warning came too late&rdquo;</text>
+
+          <path d="M470,76 C400,76 380,140 304,144" class="edge edge-dash" marker-end="url(#ah1)"/>
+          <path d="M470,148 L304,148" class="edge" marker-end="url(#ah1)"/>
+          <path d="M470,220 C400,220 380,156 304,152" class="edge" marker-end="url(#ah1)"/>
+          <text x="400" y="138" text-anchor="middle" class="lbl small">cites</text>
+          <text x="170" y="236" text-anchor="middle" class="lbl small">its own file, in your workspace</text>
+        </svg>
+        </div>
+        <figcaption>Readings change, and differ. The record they cite stays as it was.</figcaption>
+      </figure>
+
+      <p class="credit">After Kierkegaard: &ldquo;Life can only be understood backwards; but
+        it must be lived forwards&rdquo; (<cite>Journals</cite>, 1843, tr. Dru). Episodes hold the
+        backwards, what Heidegger calls having-been (<cite>Being and Time</cite>, &sect;65).</p>
+    </div>
+  </section>
+
+  <!-- 2 · ONE CONVERSATION, TWO FATES -->
+  <section id="two-fates">
+    <div class="wrap">
+      <h2>One conversation, two fates</h2>
+      <p class="lead">You tell your assistant you renewed the certificate on Tuesday
+        afternoon. Later, something is believed because you said it. When that belief is
+        questioned, what can it point to?</p>
+
+      <figure>
+        <div class="diagram-wrap">
+        <svg class="min640" viewBox="0 0 780 380" role="img" aria-labelledby="fates-title fates-desc">
+          <title id="fates-title">One conversation, two fates</title>
+          <desc id="fates-desc">On the left, the conversation lives in one harness's chat
+            history, per account and invisible to every other harness. The claim drawn
+            from it, that the certificate was renewed on Tuesday, has nothing it can
+            cite. On the right, the conversation is recorded in the person's own
+            workspace, one turn at a time, each saying who spoke it. The same claim
+            cites the turn in which it was said, and so knows whose word it rests on.</desc>
+          <defs>
+            <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="head"/>
+            </marker>
+          </defs>
+          <text x="195" y="30" text-anchor="middle" class="lbl" font-weight="600">a harness&rsquo;s chat history</text>
+          <text x="590" y="30" text-anchor="middle" class="lbl" font-weight="600">episodes</text>
+          <line x1="390" y1="20" x2="390" y2="356" class="divider"/>
+
+          <!-- left: chat history -->
+          <rect x="60" y="52" width="270" height="110" rx="12" class="box-stale"/>
+          <text x="80" y="80" class="small"><tspan font-weight="600">you</tspan> &middot; I renewed the certificate</text>
+          <text x="80" y="100" class="small">this afternoon. Can you log it?</text>
+          <text x="80" y="124" class="small"><tspan font-weight="600">assistant</tspan> &middot; Logged.</text>
+          <text x="80" y="148" class="stale-t small">one harness &middot; one account</text>
+
+          <path d="M195,248 L195,170" class="edge edge-dash"/>
+          <text x="210" y="214" class="stale-t small">cites nothing it can reach</text>
+
+          <rect x="60" y="250" width="270" height="60" rx="10" class="box"/>
+          <text x="80" y="274" class="lbl small">a claim</text>
+          <text x="80" y="296" class="small">the certificate was renewed on Tuesday</text>
+
+          <text x="195" y="342" text-anchor="middle" class="lbl">invisible to every other harness</text>
+
+          <!-- right: episodes -->
+          <rect x="430" y="48" width="320" height="140" rx="14" class="container"/>
+          <text x="740" y="180" text-anchor="end" class="lbl small">a conversation, in your workspace</text>
+          <rect x="445" y="60" width="290" height="50" rx="8" class="box"/>
+          <text x="461" y="80" class="small" font-weight="600">turn 1 &middot; you</text>
+          <text x="461" y="99" class="small lbl">&ldquo;I renewed the certificate this&hellip;&rdquo;</text>
+          <rect x="445" y="116" width="290" height="46" rx="8" class="box"/>
+          <text x="461" y="135" class="small" font-weight="600">turn 2 &middot; the assistant</text>
+          <text x="461" y="153" class="small lbl">&ldquo;Logged.&rdquo;</text>
+
+          <rect x="445" y="250" width="290" height="60" rx="10" class="box-accent"/>
+          <text x="461" y="274" class="lbl small">a claim</text>
+          <text x="461" y="296" class="small">the certificate was renewed on Tuesday</text>
+
+          <path d="M445,280 C405,280 405,86 441,86" class="edge" marker-end="url(#ah2)"/>
+          <text x="590" y="226" text-anchor="middle" class="accent-t small">cites the turn, and who spoke it</text>
+
+          <text x="590" y="342" text-anchor="middle" class="lbl">yours, and reviewed through git</text>
+        </svg>
+        </div>
+        <figcaption>The same conversation, kept by a harness and kept as a record.</figcaption>
+      </figure>
+
+      <p class="kicker">The thing a claim most often comes from is <span>the one thing it
+        can&rsquo;t cite</span>.</p>
+
+      <div class="cards">
+        <div class="card">
+          <h3>Chat history</h3>
+          <p>Proprietary, per account, and invisible to every other harness. The place
+            most of what a person tells their assistant ends up, and the one place
+            nothing else can point to.</p>
+        </div>
+        <div class="card">
+          <h3>A belief about it</h3>
+          <p>Written into a knowledge base, the event becomes a claim, open to
+            reconciliation, contradiction and synthesis, none of which apply. You
+            don&rsquo;t reconcile a past event, only beliefs about it.</p>
+        </div>
+        <div class="card">
+          <h3>The plan for it</h3>
+          <p>A planning format holds what a person means to do. A retrospective account
+            of what they did is, by its own say-so, not its job.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · WHOSE MEMORY IS IT? -->
+  <section id="standpoint">
+    <div class="wrap">
+      <h2>Whose memory is it?</h2>
+      <p class="lead">Two people live through the same meeting and take different things
+        from it. So every episode says whose experience or record it is, and every turn
+        of a conversation says who spoke it. Nothing downstream can recover that if it
+        isn&rsquo;t written down.</p>
+
+      <figure>
+        <div class="diagram-wrap">
+        <svg class="min640" viewBox="0 0 800 300" role="img" aria-labelledby="who-title who-desc">
+          <title id="who-title">A trace, and content held inline</title>
+          <desc id="who-desc">On the left, a trace: an episode of Jane's email holds a
+            pointer to where the mail lives, a way to tell whether it has changed, and
+            enough to stand as a record after the mail is gone; the text stays in her
+            mailbox. On the right, content held inline: a conversation with a harness has
+            no other home, so the episode holds the words. Beneath both: every episode
+            says whose experience or record it is.</desc>
+          <defs>
+            <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="head"/>
+            </marker>
+          </defs>
+          <text x="200" y="30" text-anchor="middle" class="lbl" font-weight="600">most episodes: a trace</text>
+          <text x="600" y="30" text-anchor="middle" class="lbl" font-weight="600">what has no other home: held</text>
+
+          <rect x="20" y="50" width="230" height="160" rx="12" class="trace"/>
+          <text x="40" y="78" font-weight="600">Jane&rsquo;s email</text>
+          <text x="40" y="104" class="small">where the mail lives</text>
+          <text x="40" y="126" class="small">a way to tell if it has changed</text>
+          <text x="40" y="148" class="small">enough to stand as a record</text>
+          <text x="40" y="168" class="small">after the mail is gone</text>
+          <text x="40" y="194" class="lbl small">never the text itself</text>
+
+          <path d="M250,112 L286,112" class="edge edge-dash" marker-end="url(#ah3)"/>
+          <rect x="290" y="80" width="100" height="64" rx="10" class="box"/>
+          <text x="340" y="106" text-anchor="middle" class="small">her mailbox</text>
+          <text x="340" y="126" text-anchor="middle" class="lbl small">the text</text>
+
+          <line x1="410" y1="40" x2="410" y2="226" class="divider"/>
+
+          <rect x="430" y="50" width="350" height="160" rx="12" class="box"/>
+          <text x="450" y="78" font-weight="600">Your conversation with a harness</text>
+          <text x="450" y="104" class="small">the words themselves, held here,</text>
+          <text x="450" y="126" class="small">because nowhere else will keep them</text>
+          <text x="450" y="148" class="small">for you</text>
+          <text x="450" y="194" class="lbl small">one turn at a time, each in its speaker&rsquo;s name</text>
+
+          <line x1="20" y1="244" x2="780" y2="244" class="divider"/>
+          <text x="400" y="276" text-anchor="middle" class="accent-t small">every episode says whose experience or record it is</text>
+        </svg>
+        </div>
+        <figcaption>Most episodes point. Only what has no other home is held.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 4 · IT RECORDS. IT NEVER INTERPRETS. -->
+  <section id="record">
+    <div class="wrap">
+      <h2>It records. It never interprets.</h2>
+      <p class="lead">An episode carries nothing that is a judgement: no topics, no
+        confidence, no sentiment, no summary, no claim that it went well. Each of those is
+        a reading, and a reading belongs to another format, where it cites the episode.
+        Episodes are not revised. A better transcript is a new episode, not an edit of the
+        old one, and forgetting is always explicit: a person can withdraw what was said,
+        and the record keeps its place and says who removed what, when and why.</p>
+
+      <figure>
+        <div class="diagram-wrap">
+        <svg class="min640" viewBox="0 0 800 262" role="img" aria-labelledby="fam-title fam-desc">
+          <title id="fam-title">Three formats, one direction</title>
+          <desc id="fam-desc">Three boxes in a row. Intentions: what a person means to
+            do. The Dialectical Knowledge Format: what is believed. Episodes: what
+            happened. Two arrows leave the knowledge format: a claim cites an episode as
+            its evidence, and cites the intention it bears on. No arrow leaves episodes,
+            which cite nothing outside their own workspace, and none runs between
+            intentions and episodes: a claim citing both is what closes the loop between
+            what was meant and what was done.</desc>
+          <defs>
+            <marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="head"/>
+            </marker>
+          </defs>
+          <text x="130" y="30" text-anchor="middle" class="lbl" font-weight="600">what is meant</text>
+          <text x="400" y="30" text-anchor="middle" class="lbl" font-weight="600">what is believed</text>
+          <text x="670" y="30" text-anchor="middle" class="lbl" font-weight="600">what happened</text>
+
+          <a href="https://intentions.fyi">
+            <rect x="20" y="44" width="220" height="120" rx="14" class="box"/>
+            <text x="130" y="76" text-anchor="middle" font-weight="600">intentions</text>
+            <text x="130" y="102" text-anchor="middle" class="small">what a person means</text>
+            <text x="130" y="120" text-anchor="middle" class="small">to do with their time</text>
+            <text x="130" y="148" text-anchor="middle" class="small">intentions.fyi</text>
+          </a>
+
+          <a href="https://particulars.fyi">
+            <rect x="290" y="44" width="220" height="120" rx="14" class="box"/>
+            <text x="400" y="76" text-anchor="middle" font-weight="600">Dialectical Knowledge</text>
+            <text x="400" y="96" text-anchor="middle" font-weight="600">Format</text>
+            <text x="400" y="120" text-anchor="middle" class="small">what is believed</text>
+            <text x="400" y="148" text-anchor="middle" class="small">particulars.fyi</text>
+          </a>
+
+          <rect x="560" y="44" width="220" height="120" rx="14" class="box-accent"/>
+          <text x="670" y="76" text-anchor="middle" font-weight="600">episodes</text>
+          <text x="670" y="102" text-anchor="middle" class="small">what happened, and</text>
+          <text x="670" y="120" text-anchor="middle" class="small">where the record lives</text>
+          <text x="670" y="148" text-anchor="middle" class="lbl small">this format</text>
+
+          <path d="M510,104 L556,104" class="edge" marker-end="url(#ah4)"/>
+          <path d="M290,104 L244,104" class="edge" marker-end="url(#ah4)"/>
+          <text x="533" y="96" text-anchor="middle" class="lbl small">cites</text>
+          <text x="267" y="96" text-anchor="middle" class="lbl small">cites</text>
+
+          <text x="535" y="190" text-anchor="middle" class="lbl small">a claim cites an episode as evidence</text>
+          <text x="265" y="190" text-anchor="middle" class="lbl small">and the intention it bears on</text>
+          <text x="670" y="210" text-anchor="middle" class="accent-t small">an episode cites nothing in either</text>
+
+          <line x1="20" y1="226" x2="780" y2="226" class="divider"/>
+          <text x="400" y="252" text-anchor="middle" class="small">nothing runs between intentions and episodes: a claim citing both closes the loop</text>
+        </svg>
+        </div>
+        <figcaption>The formats meet by reference, in one direction. <a href="https://forgetting.fyi">Forgetting</a>
+          names the gap this one fills: without a record of what was done, there is
+          nothing to compare with what was meant.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 5 · PROOF -->
+  <section id="proof">
+    <div class="wrap">
+      <h2>Read by a second reader</h2>
+      <p class="lead">A reference implementation was written from the specification.
+        Implementing it raised <a href="https://github.com/nodelogicau/episodes-cli/blob/main/SPEC-FEEDBACK.md">eighteen
+        points</a> where the draft hadn&rsquo;t decided; ten are now settled in the text, and
+        eight are open. Below is that binary&rsquo;s own output on the example workspace in
+        this site&rsquo;s repository: Jane&rsquo;s email saying a certificate expires on
+        Friday, the conversation in which Ada said she had renewed it, the act she asked to
+        have logged, and the email gone from the mailbox by Friday.</p>
+
+      <figure>
+        <div class="diagram-wrap">
+<!-- TIMELINE-FIGURE:BEGIN -->
+<svg class="min720" viewBox="0 0 970 396" role="img" aria-labelledby="proof-title proof-desc">
+  <title id="proof-title">A week of episodes, as the binary lists them</title>
+  <desc id="proof-desc">One lane for each standpoint and one column for each day. A dashed box is a trace of something that lives elsewhere; a solid box holds content that has no other home; an accented box is an act the person attested; a conversation is drawn around its turns. An arrow is a link from one episode to another. A red badge marks a source that has gone, on the day it was observed; the trace remains.</desc>
+  <defs>
+    <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+  </defs>
+  <text x="8" y="24" class="lbl">November 2026</text>
+  <text x="196" y="24" text-anchor="middle" class="lbl" font-weight="600">Mon 16</text>
+  <line x1="96" y1="34" x2="96" y2="288" class="grid"/>
+  <text x="486" y="24" text-anchor="middle" class="lbl" font-weight="600">Tue 17</text>
+  <line x1="296" y1="34" x2="296" y2="288" class="grid"/>
+  <text x="698" y="24" text-anchor="middle" class="lbl" font-weight="600">Wed</text>
+  <line x1="676" y1="34" x2="676" y2="288" class="grid"/>
+  <text x="742" y="24" text-anchor="middle" class="lbl" font-weight="600">Thu</text>
+  <line x1="720" y1="34" x2="720" y2="288" class="grid"/>
+  <text x="864" y="24" text-anchor="middle" class="lbl" font-weight="600">Fri 20</text>
+  <line x1="764" y1="34" x2="764" y2="288" class="grid"/>
+  <line x1="964" y1="34" x2="964" y2="288" class="grid"/>
+  <line x1="0" y1="48" x2="964" y2="48" class="grid"/>
+  <text x="8" y="93" class="small" font-weight="600">Jane<title>https://example.com/people/jane</title></text>
+  <line x1="0" y1="128" x2="964" y2="128" class="grid"/>
+  <text x="8" y="173" class="small" font-weight="600">Ada<title>https://example.com/people/ada</title></text>
+  <line x1="0" y1="208" x2="964" y2="208" class="grid"/>
+  <text x="8" y="253" class="small" font-weight="600">assistant<title>https://example.com/assistant</title></text>
+  <line x1="0" y1="288" x2="964" y2="288" class="grid"/>
+  <g><title>email · standpoint https://example.com/people/jane · occurred 2026-11-16T09:12:00+11:00[Australia/Melbourne] (stated) · content: ref · label: Status page certificate expires Friday</title>
+    <rect x="106" y="57.0" width="150" height="62" rx="8" class="trace"/>
+    <text x="116" y="76.0" class="small" font-weight="600">09:12 · email</text>
+    <text x="116" y="94.0" class="small lbl">Status page</text>
+    <text x="116" y="110.0" class="small lbl">certificate expires…</text>
+  </g>
+  <g><title>activity · standpoint https://example.com/people/ada · occurred 2026-11-17T14:00:00+11:00[Australia/Melbourne] to 2026-11-17T14:30:00+11:00[Australia/Melbourne] (stated) · content: attested · label: Renewed the status page certificate</title>
+    <rect x="306" y="137.0" width="150" height="62" rx="8" class="box-accent"/>
+    <text x="316" y="156.0" class="small" font-weight="600">14:00–14:30 · an act</text>
+    <text x="316" y="174.0" class="small lbl">Renewed the status</text>
+    <text x="316" y="190.0" class="small lbl">page certificate</text>
+  </g>
+  <g><title>conversation · standpoint https://example.com/people/ada · occurred 2026-11-17T16:40:00+11:00[Australia/Melbourne] · 2 turns, in order</title>
+    <rect x="480" y="132" width="162" height="152" rx="12" class="container"/>
+    <text x="638" y="126" text-anchor="end" class="lbl small">conversation · 2 turns</text>
+  </g>
+  <g><title>message · standpoint https://example.com/people/ada · occurred 2026-11-17T16:40:00+11:00[Australia/Melbourne] (recorded) · content: inline · text: I renewed the status page certificate this afternoon, from two until half past. Can you log it? · ordinal 1</title>
+    <rect x="486" y="134" width="150" height="62" rx="8" class="box"/>
+    <text x="496" y="153" class="small" font-weight="600">16:40 · turn 1</text>
+    <text x="496" y="171" class="small lbl">“I renewed the</text>
+    <text x="496" y="187" class="small lbl">status page…</text>
+  </g>
+  <g><title>message · standpoint https://example.com/assistant · occurred 2026-11-17T16:40:20+11:00[Australia/Melbourne] (recorded) · content: inline · text: Logged: renewed the status page certificate, Tuesday 14:00 to 14:30. · ordinal 2</title>
+    <rect x="486" y="214" width="150" height="62" rx="8" class="box"/>
+    <text x="496" y="233" class="small" font-weight="600">16:40 · turn 2</text>
+    <text x="496" y="251" class="small lbl">“Logged: renewed the</text>
+    <text x="496" y="267" class="small lbl">status page…</text>
+  </g>
+  <path d="M256,88 L774,88" class="edge edge-dash"/>
+  <g><title>source_status: gone · verified 2026-11-20T10:00:00+11:00 · the episode keeps its place</title>
+    <rect x="774" y="66.0" width="150" height="44" rx="8" class="box-stale"/>
+    <text x="784" y="84.0" class="stale-t small">10:00 · source gone</text>
+    <text x="784" y="101.0" class="small lbl">the trace remains</text>
+  </g>
+  <path d="M456,168 L482,165" class="edge" marker-end="url(#ahp)"/>
+  <text x="471" y="159" text-anchor="middle" class="lbl small">via</text>
+  <rect x="96" y="305" width="22" height="14" rx="3" class="trace"/>
+  <text x="126" y="316" class="small">a trace: the content lives elsewhere</text>
+  <rect x="426" y="305" width="22" height="14" rx="3" class="box"/>
+  <text x="456" y="316" class="small">inline: this is its only home</text>
+  <rect x="96" y="331" width="22" height="14" rx="3" class="box-accent"/>
+  <text x="126" y="342" class="small">an act the person attested</text>
+  <rect x="426" y="331" width="22" height="14" rx="3" class="container"/>
+  <text x="456" y="342" class="small">a container, its turns in order</text>
+  <text x="964" y="388" text-anchor="end" class="small lbl">5 episodes · drawn by episodes 0.2.0</text>
+</svg>
+<!-- TIMELINE-FIGURE:END -->
+        </div>
+        <figcaption>The week of 16 November 2026, as the binary lists it. The mail is gone
+          from Jane&rsquo;s mailbox and the trace of it isn&rsquo;t: a source being deleted is
+          not a request to forget. Hover a box for the output it was drawn from.
+          Clone <a href="https://github.com/nodelogicau/episodes/tree/main/docs/example">the workspace</a> and
+          run it yourself.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 6 · START -->
+  <section id="start">
+    <div class="wrap">
+      <h2>Start in your terminal</h2>
+      <p class="lead">Install the CLI, make a workspace, and record what happens: a
+        conversation as it is spoken, an act only when you ask for it, a trace of
+        anything that already has a home.</p>
+
+      <pre class="term"><code><span class="p">$</span> brew install nodelogicau/tap/episodes
+<span class="p">$</span> episodes init ./memory --author you --zone Australia/Melbourne
+<span class="p">$</span> cd memory
+<span class="p">$</span> episodes conversation start --standpoint you \
+    --text "I renewed the certificate this afternoon, from two until half past."
+<span class="p">$</span> episodes act --label "Renewed the certificate" --basis stated \
+    --occurred 2026-11-17T14:00:00+11:00 --end 2026-11-17T14:30:00+11:00 --via &lt;turn&gt;
+<span class="p">$</span> episodes record ref --kind email --standpoint jane \
+    --ref "mail:inbox/4471" --occurred 2026-11-16T09:12:00+11:00 --basis stated
+<span class="p">$</span> episodes list
+<span class="p">$</span> episodes query certificate</code></pre>
+
+      <p>Every file is one episode, in plain YAML, so what was recorded about you is
+        something you can read, review through git, and withdraw.</p>
+
+      <ul class="links">
+        <li><a href="https://github.com/nodelogicau/episodes">The specification</a></li>
+        <li><a href="https://github.com/nodelogicau/episodes-cli">The CLI</a></li>
+        <li><a href="https://github.com/nodelogicau/episodes/tree/main/docs/example">The example workspace</a></li>
+        <li><a href="https://github.com/nodelogicau/episodes-cli/releases/tag/v0.2.0">v0.2.0 release</a></li>
+      </ul>
+
+      <p class="roadmap"><strong>Today:</strong> an early draft of the specification, with
+        nothing yet declared, and a reference implementation, episodes-cli v0.2.0, that
+        writes, recalls and validates it. &nbsp;&middot;&nbsp; <strong>Open:</strong> the
+        questions the specification lists, among them how large a conversation episode
+        should be, and how a claim cites a span of a source rather than the whole.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Episodes is an open format from
+      <a href="https://github.com/nodelogicau">Node Logic</a>. The specification is
+      released under CC0; the CLI is MIT-licensed. &copy; 2026 Node Logic.</p>
+  </div>
+</footer>
+</body>
+</html>

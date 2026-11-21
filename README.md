@@ -7,6 +7,9 @@ harnesses and connectors, reviewed by people through git, and cited by the
 [intentions](https://github.com/nodelogicau/intentions) by reference rather
 than by shared schema.
 
+**[episodes.fyi](https://episodes.fyi)** — a visual introduction for
+practitioners.
+
 > **Draft.** Nothing in this document is declared. Field names and the file
 > layout will change before `episodes/0.1`.
 

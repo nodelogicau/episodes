@@ -1,0 +1,13 @@
+id: epi_01a1e804-ef80-72fc-862f-f242eca33736
+type: episode
+kind: conversation
+occurred:
+  start: "2026-11-17T16:40:00+11:00[Australia/Melbourne]"
+  basis: recorded
+standpoint: https://example.com/people/ada
+content:
+  mode: none
+source:
+  author: https://example.com/people/ada
+  harness: example-harness
+timestamp: 2026-11-17T05:40:00Z

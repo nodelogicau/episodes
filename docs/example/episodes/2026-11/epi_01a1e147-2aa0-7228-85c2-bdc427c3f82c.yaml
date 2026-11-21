@@ -1,0 +1,23 @@
+id: epi_01a1e147-2aa0-7228-85c2-bdc427c3f82c
+type: episode
+kind: email
+occurred:
+  start: "2026-11-16T09:12:00+11:00[Australia/Melbourne]"
+  basis: stated
+standpoint: https://example.com/people/jane
+participants:
+  - https://example.com/people/ada
+label: Status page certificate expires Friday
+content:
+  mode: ref
+  ref: mail:inbox/4471
+  uid: mid:status-cert-4471@mail.example.com
+  media_type: message/rfc822
+source:
+  author: https://example.com/people/ada
+  harness: example-harness
+timestamp: 2026-11-15T22:15:00Z
+source_status:
+  state: gone
+  verified: 2026-11-19T23:00:00Z
+  detected: 2026-11-19T23:00:00Z

@@ -1,0 +1,18 @@
+id: epi_01a1e805-64b0-7049-a971-4abc924bfd88
+type: episode
+kind: activity
+occurred:
+  start: "2026-11-17T14:00:00+11:00[Australia/Melbourne]"
+  end: "2026-11-17T14:30:00+11:00[Australia/Melbourne]"
+  basis: stated
+standpoint: https://example.com/people/ada
+label: Renewed the status page certificate
+links:
+  - rel: via
+    href: epi_01a1e804-ef80-72fd-a995-e48a87de60c4
+content:
+  mode: attested
+source:
+  author: https://example.com/people/ada
+  harness: example-harness
+timestamp: 2026-11-17T05:40:30Z

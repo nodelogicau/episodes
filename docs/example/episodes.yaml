@@ -1,0 +1,8 @@
+format: episodes/0.1
+workspace:
+  id: 01a1fc67-b5ee-7d8c-8b76-e67ba782c5f3
+defaults:
+  source:
+    author: https://example.com/people/ada
+    harness: example-harness
+  zone: Australia/Melbourne
