@@ -1614,9 +1614,14 @@ validated. The other formats cite episodes, through fields they already have.
 
 ## Status
 
-Early draft. Nothing is declared and no implementation exists. The object
-model above is the first proposal; the open questions below are listed rather
-than closed.
+Early draft. Nothing is declared. The object model above is the first
+proposal; the open questions below are listed rather than closed.
+
+[`episodes-cli` v0.2.0](https://github.com/nodelogicau/episodes-cli/releases/tag/v0.2.0)
+is a reference implementation of this draft. Where the draft left a behaviour
+undecided, it decided and recorded the decision in
+[`SPEC-FEEDBACK.md`](https://github.com/nodelogicau/episodes-cli/blob/main/SPEC-FEEDBACK.md);
+the points still open there are tracked as issues on this repository.
 
 - **Derived renderings of referenced media.** A voice memo in storage is
   referenced, but its transcript is the harness's own work and has no other
